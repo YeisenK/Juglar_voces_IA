@@ -164,7 +164,7 @@ Cada uno tiene **su propia voz**, creada a partir de la descripción que me dist
 | `—@arnau` | Arnau | ~50, sargento ronco y fuerte, malhablado, acento de costa. |
 | `—@tri` | Tri | ~22, claro y cálido, curioso; se atropella cuando se entusiasma y duda con pausas cortas. |
 | `—@tri_falso` | Tri falso | La misma voz de Tri, pero lisa y uniforme, sin dudas: tranquila e inquietante por lo perfecta. |
-| `—@leonor` | Leonor | ~20, mujer fuerte y segura: voz con cuerpo, algo grave, práctica y firme, juguetona y burlona. |
+| `—@leonor` | Leonor | ~25, mujer joven de timbre vivo y brillante: práctica y directa, burlona con confianza, rápida cuando está nerviosa y cálida cuando es tierna. |
 | `—@myria` | Myria | ~22, noble: suave y aterciopelada, lenta y contenida, melancólica. |
 | `—@luca` | Luca | ~35, heredero: barítono cálido y cansado, risa nerviosa por la nariz, seco cuando hay tensión. |
 | `—@maia` | Maia | ~30, la hermana mayor: curiosa y mandona, lo pregunta todo y organiza a todos; cálida y firme. |
