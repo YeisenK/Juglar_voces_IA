@@ -146,6 +146,6 @@ toast { border-radius: 6px; }
 .strip button.save.suggested-action { box-shadow: 0 0 0 2px rgba(38, 128, 235, 0.35), 0 0 14px rgba(38, 128, 235, 0.45); }
 
 /* aviso de modo flash en la barra superior */
-.flash-badge { background: rgba(230, 134, 25, 0.22); color: #ffb35c; border: 1px solid rgba(230, 134, 25, 0.6);
+.flash-badge { background: rgba(38, 128, 235, 0.22); color: #8cc0ff; border: 1px solid rgba(38, 128, 235, 0.6);
                border-radius: 999px; padding: 2px 12px; font-weight: bold; }
-.flash-badge:hover { background: rgba(230, 134, 25, 0.35); }
+.flash-badge:hover { background: rgba(38, 128, 235, 0.35); }
