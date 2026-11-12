@@ -469,6 +469,14 @@ class JuglarWindow(Adw.ApplicationWindow):
 
         self.win_title = Adw.WindowTitle(title="Juglar", subtitle="")
         header = Adw.HeaderBar(title_widget=self.win_title)
+        # aviso siempre visible mientras el modo flash está activo; al pulsarlo se apaga
+        self.flash_badge = Gtk.Button(child=Adw.ButtonContent(icon_name="weather-storm-symbolic",
+                                                              label="Modo flash activado"),
+                                      tooltip_text="Sin revisar con Whisper y todo con la voz del narrador.\n"
+                                                   "Pulsa para desactivarlo.", visible=False)
+        self.flash_badge.add_css_class("flash-badge")
+        self.flash_badge.connect("clicked", lambda *_: self.libro_widgets["flash"].set_active(False))
+        header.pack_start(self.flash_badge)
         menu = Gio.Menu()
         menu.append("Atajos de teclado", "win.atajos")
         menu.append("Abrir carpeta de voces", "win.carpeta-voces")
@@ -1644,6 +1652,8 @@ class JuglarWindow(Adw.ApplicationWindow):
     def update_flash_ui(self):
         """En modo flash, lo que no se usa (Whisper y las voces de los diálogos) se ve apagado."""
         flash = self.libro_widgets["flash"].get_active()
+        if getattr(self, "flash_badge", None):
+            self.flash_badge.set_visible(flash)
         self.libro_widgets["revisar"].set_sensitive(not flash)
         self.dialogs_group.set_sensitive(not flash)
 
