@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.bak*
+*.log
+*.tmp
+# datos del usuario: viven en ~/.local/share/juglar y ~/.config/juglar, no aquí
+voces/*/ajustes.json
+voces/*/ref_completo.*
+voces/elenco.json
+voces/libro.json
+voces/personajes.json

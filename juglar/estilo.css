@@ -1,0 +1,141 @@
+/* Juglar — tema oscuro de estudio (inspirado en las apps profesionales de audio/vídeo) */
+
+:root {
+  --accent-bg-color: #2680eb;
+  --accent-fg-color: #ffffff;
+  --accent-color: #5aa2f7;
+  --window-bg-color: #1c1c1c;
+  --window-fg-color: #e4e4e4;
+  --view-bg-color: #171717;
+  --view-fg-color: #e4e4e4;
+  --headerbar-bg-color: #121212;
+  --headerbar-fg-color: #d6d6d6;
+  --headerbar-backdrop-color: #121212;
+  --headerbar-border-color: #262626;
+  --headerbar-shade-color: rgba(0, 0, 0, 0.5);
+  --sidebar-bg-color: #1f1f1f;
+  --sidebar-fg-color: #e0e0e0;
+  --sidebar-backdrop-color: #1f1f1f;
+  --card-bg-color: #242424;
+  --card-fg-color: #e4e4e4;
+  --card-shade-color: rgba(0, 0, 0, 0.4);
+  --popover-bg-color: #282828;
+  --popover-fg-color: #e4e4e4;
+  --dialog-bg-color: #242424;
+  --dialog-fg-color: #e4e4e4;
+  --border-color: #333333;
+  --destructive-bg-color: #d7373f;
+  --success-color: #2d9d78;
+  --warning-color: #e68619;
+  --error-color: #e34850;
+}
+
+/* ---- barra de título ---- */
+headerbar { min-height: 38px; box-shadow: inset 0 -1px #262626; }
+headerbar .title { font-weight: 700; font-size: 13px; letter-spacing: 0.2px; }
+headerbar .subtitle { font-size: 11px; color: #8c8c8c; }
+
+/* ---- barra de herramientas lateral ---- */
+.rail { background: #121212; border-right: 1px solid #262626; padding: 10px 6px; }
+.rail button {
+  background: transparent; color: #9a9a9a; border-radius: 6px;
+  padding: 9px 2px 7px; min-width: 66px; box-shadow: none;
+}
+.rail button:hover { background: #1f1f1f; color: #ffffff; }
+.rail button:checked { background: #252525; color: #ffffff; box-shadow: inset 3px 0 0 #2680eb; }
+.rail button:checked image { color: #5aa2f7; }
+.rail .rail-label { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; }
+.rail .brand { color: #2680eb; margin-bottom: 8px; }
+
+/* ---- franjas de cabecera de panel ---- */
+.strip {
+  background: #181818; border-bottom: 1px solid #2a2a2a;
+  padding: 6px 12px; min-height: 34px;
+}
+.panel-title { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; color: #a0a0a0; }
+.field-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #7d7d7d; }
+.strip button { min-height: 26px; padding: 2px 10px; border-radius: 4px; }
+.strip dropdown > button, .strip spinbutton { min-height: 26px; border-radius: 4px; }
+
+/* ---- editor ---- */
+.editor, .editor text { background: #151515; color: #e8e8e8; }
+.editor { font-size: 15px; }
+.editor-frame { border-top: 1px solid #262626; }
+.hint { color: #6f6f6f; font-size: 14px; }
+
+/* ---- transporte ---- */
+.transport { background: #161616; border-top: 1px solid #2a2a2a; padding: 8px 14px; }
+.transport button.play { min-width: 46px; min-height: 46px; border-radius: 23px; padding: 0; }
+.transport button.ctrl { min-width: 34px; min-height: 34px; border-radius: 17px; padding: 0; }
+.timecode {
+  font-family: "Roboto Mono", "DejaVu Sans Mono", monospace; font-size: 20px; font-weight: 600;
+  color: #5aa2f7; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 4px;
+  padding: 3px 12px; font-feature-settings: "tnum";
+}
+.transport-status { color: #8c8c8c; font-size: 12px; }
+
+/* ---- inspector (panel derecho) ---- */
+.inspector { background: #1d1d1d; border-left: 1px solid #2a2a2a; }
+.section { padding: 14px 16px; border-bottom: 1px solid #262626; }
+.stat-value { font-size: 20px; font-weight: 700; color: #ededed; font-feature-settings: "tnum"; }
+.stat-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #7d7d7d; }
+.cast-line { font-size: 12px; color: #c8c8c8; }
+.cast-line.warn { color: #e68619; }
+.chip {
+  background: #2b2b2b; border: 1px solid #353535; border-radius: 3px;
+  padding: 0 6px; font-size: 11px; font-weight: 600; color: #cfcfcf;
+}
+.chip.accent { background: rgba(38, 128, 235, 0.18); border-color: rgba(38, 128, 235, 0.45); color: #8cc0ff; }
+
+/* ---- cola tipo codificador ---- */
+.col-head { background: #161616; border-bottom: 1px solid #2a2a2a; padding: 5px 12px; }
+.col-head label { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: #7d7d7d; }
+.joblist { background: #171717; }
+.joblist > row { padding: 0; border-bottom: 1px solid #242424; }
+.joblist > row:hover { background: #1e1e1e; }
+.job-title { font-weight: 600; font-size: 13px; }
+.job-sub { font-size: 11px; color: #8a8a8a; }
+.job-cell { font-size: 12px; color: #bdbdbd; font-feature-settings: "tnum"; }
+.job-done image.state { color: #2d9d78; }
+.job-failed image.state { color: #e34850; }
+.job-running image.state { color: #5aa2f7; }
+progressbar trough { min-height: 5px; border-radius: 3px; background: #2a2a2a; }
+progressbar progress { min-height: 5px; border-radius: 3px; }
+.dropzone {
+  border: 2px dashed #353535; border-radius: 10px; background: #191919;
+  margin: 24px; padding: 40px 24px;
+}
+.dropzone.hover { border-color: #2680eb; background: rgba(38, 128, 235, 0.06); }
+.dropzone .title { font-size: 18px; font-weight: 700; color: #dcdcdc; }
+.dropzone .desc { color: #8a8a8a; }
+
+/* ---- navegador de voces ---- */
+.browser { background: #1a1a1a; border-right: 1px solid #2a2a2a; }
+.browser searchentry { margin: 8px; min-height: 30px; border-radius: 4px; }
+.browser list { background: transparent; }
+
+/* ---- barra de estado ---- */
+.statusbar {
+  background: #121212; border-top: 1px solid #262626; padding: 3px 12px;
+  font-size: 11px; color: #8f8f8f; min-height: 22px;
+}
+.status-dot { min-width: 8px; min-height: 8px; border-radius: 4px; background: #555555; }
+.status-dot.busy { background: #2680eb; }
+.status-dot.ok { background: #2d9d78; }
+.status-dot.paused { background: #e68619; }
+
+/* ---- controles generales más sobrios ---- */
+.boxed-list, .card, list.boxed-list { border-radius: 6px; }
+preferencespage > scrolledwindow > viewport > clamp > box { margin-top: 18px; }
+preferencesgroup .heading, preferencesgroup > box > box > label.title { font-size: 12px; letter-spacing: 0.6px; }
+button.suggested-action { font-weight: 700; }
+scale trough { min-height: 4px; }
+toast { border-radius: 6px; }
+
+/* ---- ajustes finos de densidad ---- */
+.strip button label, .strip button { font-size: 12.5px; font-weight: 600; }
+.strip button.suggested-action label { font-weight: 700; }
+.browser row { min-height: 34px; }
+.browser row .title { font-size: 13px; }
+.browser row .subtitle { font-size: 11px; color: #5aa2f7; }
+.transport scale { min-width: 150px; }

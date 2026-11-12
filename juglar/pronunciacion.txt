@@ -1,0 +1,7 @@
+# Diccionario de pronunciación de Juglar.
+# Una línea por palabra:  Palabra = cómo debe leerse   (distingue mayúsculas; solo palabras completas)
+# Sirve para nombres inventados o extranjeros que la voz pronuncia mal. Las tildes marcan el acento.
+# Quita el # de una línea para activarla. Tu copia está en ~/.config/juglar/pronunciacion.txt
+# Hermione = Jermáyoni
+# Edward = Édguard
+# NASA = Nasa

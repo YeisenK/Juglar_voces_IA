@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# juglar-pruebas: genera las pruebas de voz que falten (--todas incluye Piper y Kokoro).
+R="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+exec /usr/bin/python3 "$R/juglar/pruebas.py" "$@"

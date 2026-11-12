@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# leer: lee texto en voz alta con las voces de Juglar (español)
+# Uso: leer "texto"  |  echo "texto" | leer  |  leer archivo.md
+#      leer -v kokoro:ef_dora "texto"   |   leer -o salida.mp3 "texto"
+#      leer -s 1.2 "texto"  (velocidad: >1 más rápido, <1 más lento)
+R="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+MD2AUDIO="$R/bin/md2audio"
+VOICE="${JUGLAR_VOZ:-${PIPER_VOICE:-qwen:narradora}}"
+OUT="" FILE="" SPEED="1.0"
+while getopts "v:o:f:s:lh" opt; do
+  case $opt in
+    v) VOICE="$OPTARG" ;;
+    o) OUT="$OPTARG" ;;
+    f) FILE="$OPTARG" ;;
+    s) SPEED="$OPTARG" ;;
+    l) "$MD2AUDIO" --list-voices | cut -f1; exit 0 ;;
+    h) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; echo "  leer -l  (listar voces)"; exit 0 ;;
+    *) exit 1 ;;
+  esac
+done
+shift $((OPTIND-1))
+if [[ -n "$FILE" ]]; then TEXT="$(cat "$FILE")"
+elif [[ $# -eq 1 && -f "$1" ]]; then TEXT="$(cat "$1")"   # leer archivo.md
+elif [[ $# -gt 0 ]]; then TEXT="$*"
+else TEXT="$(cat)"; fi
+RATE=$("$MD2AUDIO" --list-voices | awk -F'\t' -v v="$VOICE" '$1==v{print $2}')
+[[ -n "$RATE" ]] || { echo "Voz no encontrada: $VOICE (usa leer -l)" >&2; exit 1; }
+if [[ -n "$OUT" ]]; then
+  TMP=$(mktemp --suffix=.md); trap 'rm -f "$TMP"' EXIT
+  printf '%s' "$TEXT" > "$TMP"
+  "$MD2AUDIO" "$TMP" -o "$OUT" -v "$VOICE" -s "$SPEED"
+else
+  printf '%s' "$TEXT" | "$MD2AUDIO" - --raw -v "$VOICE" -s "$SPEED" 2>/dev/null \
+    | aplay -q -r "$RATE" -f S16_LE -t raw -c 1 -
+fi

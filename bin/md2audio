@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# md2audio: convierte un .md/.txt en audio desde la terminal (md2audio --help).
+R="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+exec /usr/bin/python3 "$R/juglar/md2audio.py" "$@"

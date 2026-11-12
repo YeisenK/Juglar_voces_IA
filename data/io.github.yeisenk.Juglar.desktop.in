@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Juglar
+GenericName=Audiolibros y lectura en voz alta
+Comment=Lee textos en voz alta y convierte libros en audiolibros con una voz para cada personaje
+Exec=@BIN@/juglar %F
+Icon=io.github.yeisenk.Juglar
+Terminal=false
+Categories=AudioVideo;Audio;Utility;Accessibility;
+Keywords=tts;voz;leer;audiolibro;narrador;texto;markdown;
+StartupNotify=true
+MimeType=text/markdown;text/x-markdown;text/plain;

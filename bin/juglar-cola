@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# juglar-cola: la cola de exportación desde la terminal (add, list, pause, resume, cancel, remove, clear).
+R="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+exec /usr/bin/python3 "$R/juglar/cola.py" "$@"

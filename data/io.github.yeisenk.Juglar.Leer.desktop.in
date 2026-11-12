@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Leer en voz alta (Juglar)
+Comment=Lee el archivo en voz alta ahora mismo
+Exec=@BIN@/juglar --leer %f
+Icon=io.github.yeisenk.Juglar
+Terminal=false
+NoDisplay=true
+Categories=AudioVideo;Audio;Utility;Accessibility;
+MimeType=text/markdown;text/x-markdown;text/plain;
+StartupNotify=true

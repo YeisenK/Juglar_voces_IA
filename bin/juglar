@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# juglar: abre la app. «juglar --leer archivo.md» lo lee en voz alta ya; «juglar archivo.md» lo añade a la cola.
+R="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+exec /usr/bin/python3 "$R/juglar/app.py" "$@"
