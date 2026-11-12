@@ -325,12 +325,13 @@ def quitar_marca(texto, validas, nombres=()):
     return texto, None
 
 
-def dividir_dialogo(texto, min_acotacion=25, validas=(), nombres=()):
+def dividir_dialogo(texto, min_acotacion=0, validas=(), nombres=()):
     """Separa un párrafo con rayas en [(rol, texto, voz)] para leerlo con varias voces.
 
     rol es 'narrador' o 'dialogo'; voz es el número (—2 …) o el nombre (—@marta …) del personaje, o None. Un párrafo que empieza
-    por raya alterna: habla del personaje, acotación del narrador («—dijo Sirio—»), habla… Las acotaciones
-    cortas se quedan con la voz que hablaba, para no trocear la frase. Un párrafo sin raya inicial es narración.
+    por raya alterna: habla del personaje, acotación del narrador («—dijo Sirio—»), habla… Toda acotación la lee
+    el narrador, por corta que sea (con min_acotacion > 0, las más cortas se quedarían con la voz que hablaba).
+    Un párrafo sin raya inicial es narración.
     """
     if not re.match(r"\s*[—–]", texto):
         return [("narrador", texto, None)]

@@ -211,7 +211,7 @@ Qué pasará al leerlo:
 
 - El título se lee como capítulo, con pausa.
 - El narrador lee los párrafos sin raya.
-- Leonor, Pedro y Galindo hablan con sus voces; «preguntó» lo dice Leonor por ser corto.
+- Leonor, Pedro y Galindo hablan con sus voces; las acotaciones («preguntó», «dijo Galindo») las lee siempre el narrador.
 - `---` deja una pausa larga de cambio de escena.
 
 ---
