@@ -104,6 +104,8 @@ Distingue mayúsculas y solo cambia palabras completas.
 
 Se eligen como **narrador** (desplegable *Voz*) o se asignan a un **número** (`—1` … `—5`) en la pestaña *Voces*.
 
+Cada voz es también un personaje: se escribe con `—@` y su nombre (`—@mujer_joven`, `—@tabernero`). En la pestaña *Voces* puedes cambiarle el **nombre**, y su marca pasa a ser ese nombre (`Mozo de pueblo` → `—@mozo_de_pueblo`); la marca con el nombre de la carpeta sigue valiendo. El botón de copiar te da la marca lista para pegar.
+
 **Narradores**
 
 | Voz en la app | Cómo suena |

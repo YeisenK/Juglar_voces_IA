@@ -259,22 +259,49 @@ def elenco():
     return {k: f for k, f in _json(ELENCO).items() if f.get("voz") in perfiles}
 
 
+QWEN_LABELS = {   # nombres de fábrica de las voces de narrador (mandan sobre el «label» de meta.json)
+    "narradora": "Narradora de audiolibros",
+    "narrador": "Narrador de audiolibros",
+    "narradora_espana": "Narradora española",
+    "documental_mujer": "Narradora de documentales",
+    "documental_hombre": "Narrador de documentales",
+}
+
+
+def nombre_voz(perfil):
+    """Nombre visible de una voz de Qwen: el que le puso el usuario («nombre»), el de fábrica o el de meta.json."""
+    meta = _json(QWEN_VOICES / perfil / "meta.json")
+    return meta.get("nombre") or QWEN_LABELS.get(perfil) or meta.get("label") or perfil.replace("_", " ").capitalize()
+
+
 def marcas_voces():
-    """{marca: perfil} para escribir —@marca con una voz de Qwen: su carpeta, su nombre visible y ese nombre sin
-    el paréntesis si le quedan al menos dos palabras («Vieja de pueblo (brava)» → vieja_brava, vieja_de_pueblo_brava y vieja_de_pueblo).
-    Un alias que coincide con otra voz o con un personaje, o que comparten dos voces, no se usa."""
+    """{marca: perfil} para escribir —@marca con una voz de Qwen. Cada voz responde a su carpeta, a su nombre
+    («Mozo de pueblo» → mozo_de_pueblo) y a ese nombre sin el paréntesis si le quedan al menos dos palabras
+    («Vieja de pueblo (brava)» → vieja_de_pueblo). Un alias que coincide con otra voz o con un personaje,
+    o que comparten dos voces, no se usa."""
     perfiles, personajes_ = qwen_profiles(), set(_json(ELENCO))
     marcas, repetidas = {p: p for p in perfiles}, set()
     for p in perfiles:
-        label = _json(QWEN_VOICES / p / "meta.json").get("label", "")
-        corto = texto_es.slug(re.sub(r"\(.*?\)", "", label))
-        for alias in {texto_es.slug(label), corto if "_" in corto else ""} - {"", p}:  # «mujer» a secas, no
-            if alias in perfiles or alias in personajes_:
+        meta = _json(QWEN_VOICES / p / "meta.json")
+        alias = set()
+        for label in {nombre_voz(p), meta.get("label", "")}:
+            corto = texto_es.slug(re.sub(r"\(.*?\)", "", label))
+            alias |= {texto_es.slug(label), corto if "_" in corto else ""}
+        for a in alias - {"", p}:
+            if a in perfiles or a in personajes_:
                 continue
-            if alias in marcas and marcas[alias] != p:
-                repetidas.add(alias)
-            marcas[alias] = p
+            if a in marcas and marcas[a] != p:
+                repetidas.add(a)
+            marcas[a] = p
     return {k: v for k, v in marcas.items() if k not in repetidas}
+
+
+def marca_voz(perfil, marcas=None):
+    """La marca que se muestra para una voz: la de su nombre si el usuario la renombró; si no, su carpeta."""
+    marcas = marcas_voces() if marcas is None else marcas
+    propio = _json(QWEN_VOICES / perfil / "meta.json").get("nombre")
+    m = texto_es.slug(propio) if propio else ""
+    return m if marcas.get(m) == perfil else perfil
 
 
 def ficha_ajustes(ficha, override=None):

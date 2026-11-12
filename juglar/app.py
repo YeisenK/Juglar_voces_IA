@@ -72,13 +72,6 @@ def list_voices():
 
 
 REGIONS = {"es_ES": "España", "es_MX": "México", "es_AR": "Argentina", "es_US": "EE. UU.", "es_CO": "Colombia"}
-QWEN_LABELS = {
-    "narradora": "Narradora de audiolibros",
-    "narrador": "Narrador de audiolibros",
-    "narradora_espana": "Narradora española",
-    "documental_mujer": "Narradora de documentales",
-    "documental_hombre": "Narrador de documentales",
-}
 
 
 def qwen_name(spec):
@@ -88,9 +81,7 @@ def qwen_name(spec):
 def short_label(spec):
     """Nombre de la voz sin el motor: «Narrador de audiolibros», «Dora (mujer)»…"""
     if spec.startswith("qwen:"):
-        name = spec.split(":", 1)[1]
-        return QWEN_LABELS.get(name) or md2audio._json(md2audio.QWEN_VOICES / name / "meta.json").get("label") \
-            or name.replace("_", " ").capitalize()
+        return md2audio.nombre_voz(spec.split(":", 1)[1])
     if spec.startswith("kokoro:"):
         name = spec.split(":", 1)[1]
         gender = {"f": "mujer", "m": "hombre"}.get(name[1:2], "")
@@ -917,6 +908,16 @@ class JuglarWindow(Adw.ApplicationWindow):
     def build_voice_detail(self):
         page = Adw.PreferencesPage()
         self.voice_group = Adw.PreferencesGroup()
+        self.voice_name_row = Adw.EntryRow(title="Nombre", show_apply_button=True)
+        self.voice_name_row.connect("apply", self.on_voice_rename)
+        self.voice_group.add(self.voice_name_row)
+        self.voice_marker_row = Adw.ActionRow(title="Cómo escribirlo en el texto")
+        self.voice_marker_row.add_css_class("property")
+        copy = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="Copiar", valign=Gtk.Align.CENTER)
+        copy.add_css_class("flat")
+        copy.connect("clicked", self.on_copy_voice_marker)
+        self.voice_marker_row.add_suffix(copy)
+        self.voice_group.add(self.voice_marker_row)
         play_row = Adw.ActionRow(title="Probar esta voz",
                                  subtitle="Prueba estándar con preguntas y exclamaciones; se genera una vez y se guarda")
         self.try_stop = Gtk.Button(icon_name="media-playback-stop-symbolic", tooltip_text="Detener",
@@ -1059,7 +1060,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         mapa = md2audio.personajes()
         dialog = md2audio.libro_settings().get("voz_dialogo")
         narrator = self.current_voice()
-        cast = load_elenco()
+        cast, marcas = load_elenco(), md2audio.marcas_voces()
         i = 0
         while (row := self.voice_list.get_row_at_index(i)) is not None:
             if row.spec.startswith("personaje:"):
@@ -1070,6 +1071,8 @@ class JuglarWindow(Adw.ApplicationWindow):
                 i += 1
                 continue
             name, tags = qwen_name(row.spec), []
+            if name:
+                tags.append(f"—@{md2audio.marca_voz(name, marcas)}")
             if row.spec == narrator:
                 tags.append("Narrador")
             if name:
@@ -1114,6 +1117,11 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.num_group.set_visible(name is not None)
         self.del_voice_group.set_visible(name is not None)
         self.save_char_row.set_visible(name is not None)
+        self.voice_name_row.set_visible(name is not None)
+        self.voice_marker_row.set_visible(name is not None)
+        if name:
+            self.voice_name_row.set_text(short_label(spec))
+            self.voice_marker_row.set_subtitle(f"—@{md2audio.marca_voz(name)} Hola, ¿qué tal?")
         self.refresh_use_button()
         self.update_try_buttons()
         if name:
@@ -1324,6 +1332,37 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.update_stats()
         if new != old:
             self.toast(f"Ahora se escribe —@{new}. Cambia el texto donde usabas «—@{old}»")
+
+    def on_voice_rename(self, row):
+        """Cambia el nombre de una voz de Qwen; su marca —@ pasa a ser ese nombre (la carpeta sigue valiendo)."""
+        name, nombre = qwen_name(self.sel_voice), row.get_text().strip()
+        marca = md2audio.texto_es.slug(nombre)
+        if not name or not marca:
+            self.toast("Escribe un nombre")
+            return
+        antes = md2audio.marca_voz(name)
+        marcas = md2audio.marcas_voces()
+        if marca in load_elenco() or (marca in md2audio.qwen_profiles() and marca != name) or \
+                (marca in marcas and marcas[marca] != name):
+            self.toast(f"—@{marca} ya es de otra voz o personaje")
+            return
+        path = md2audio.QWEN_VOICES / name / "meta.json"
+        meta = md2audio._json(path)
+        meta["nombre"] = nombre
+        write_json(path, meta)
+        self.reload_voices()
+        self.fill_voice_list(select=self.sel_voice)
+        self.update_statusbar_voice()
+        self.update_stats()
+        ahora = md2audio.marca_voz(name)
+        if ahora != antes:
+            self.toast(f"Ahora se escribe —@{ahora} (—@{name} también sigue valiendo)")
+
+    def on_copy_voice_marker(self, _btn):
+        name = qwen_name(self.sel_voice)
+        if name:
+            Gdk.Display.get_default().get_clipboard().set(f"—@{md2audio.marca_voz(name)} ")
+            self.toast("Copiado")
 
     def on_copy_marker(self, _btn):
         if self.sel_char:
