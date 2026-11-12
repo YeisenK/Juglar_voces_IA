@@ -4,7 +4,8 @@
 #   ./install.sh               todo: Piper, Kokoro, Qwen3-TTS (GPU) y Whisper
 #   SIN_QWEN=1 ./install.sh    solo las voces rápidas (Piper y Kokoro), sin GPU
 #
-# Es seguro volver a ejecutarlo: lo que ya está instalado se deja como está.
+# Es seguro volver a ejecutarlo: lo que ya está instalado se deja como está, salvo las voces que cambiaron
+# en el repositorio, que se actualizan guardando copia (ACTUALIZAR_VOCES=1 / =0 para no preguntar).
 set -euo pipefail
 
 R="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -100,12 +101,78 @@ fi
 # ---------------------------------------------------------------- 4. voces de Qwen y ajustes
 paso "Voces de Qwen incluidas"
 mkdir -p "$DATA/voces"
-nuevas=0
-for d in "$R"/voces/*/; do
-  n="$(basename "$d")"
-  if [[ ! -e "$DATA/voces/$n" ]]; then cp -r "$d" "$DATA/voces/$n"; nuevas=$((nuevas + 1)); fi
-done
-echo "    $nuevas voces nuevas copiadas ($(ls "$DATA/voces" | wc -l) en total)"
+# Copia las voces nuevas y actualiza las que cambiaron en el repositorio. voces/.repo.json recuerda qué versión
+# de cada voz instaló Juglar: si la tuya sigue siendo esa, se actualiza sola; si no se sabe (instalaciones
+# anteriores) o la cambiaste tú, pregunta (o ACTUALIZAR_VOCES=1 / =0). Antes de cambiar una voz se guarda una
+# copia en voces_antes_FECHA, y se conservan tus ajustes (ajustes.json) y el nombre que le hayas puesto.
+interactivo=0; [[ -t 0 ]] && interactivo=1
+REPO="$R" DATA="$DATA" ACTUALIZAR="${ACTUALIZAR_VOCES:-}" INTERACTIVO="$interactivo" python3 - <<'EOF'
+import datetime, hashlib, json, os, shutil
+from pathlib import Path
+repo, data = Path(os.environ["REPO"]) / "voces", Path(os.environ["DATA"]) / "voces"
+reg_path = data / ".repo.json"
+try:
+    reg = json.loads(reg_path.read_text())
+except (OSError, ValueError):
+    reg = {}
+h = lambda f: hashlib.sha256(f.read_bytes()).hexdigest() if f.exists() else None  # noqa: E731
+copia = data.parent / f"voces_antes_{datetime.date.today()}"
+
+def actualizar(n):
+    src, dst = repo / n, data / n
+    if dst.exists():
+        if not (copia / n).exists():
+            shutil.copytree(dst, copia / n)
+        try:
+            nombre = json.loads((dst / "meta.json").read_text()).get("nombre")
+        except (OSError, ValueError):
+            nombre = None
+        for f in ("ref.wav", "ref.txt", "meta.json"):
+            shutil.copy(src / f, dst / f)
+        if nombre:  # el nombre que le puso el usuario se queda
+            meta = json.loads((dst / "meta.json").read_text())
+            meta["nombre"] = nombre
+            (dst / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
+    else:
+        shutil.copytree(src, dst)
+    reg[n] = h(src / "ref.wav")
+
+nuevas, actualizadas, dudosas = [], [], []
+for src in sorted(p for p in repo.iterdir() if (p / "ref.wav").exists()):
+    n, nuevo, tuyo = src.name, h(src / "ref.wav"), h(data / src.name / "ref.wav")
+    if tuyo is None:
+        actualizar(n); nuevas.append(n)
+    elif tuyo == nuevo:
+        reg[n] = nuevo
+    elif reg.get(n) == tuyo:  # no la tocaste desde que se instaló: se actualiza
+        actualizar(n); actualizadas.append(n)
+    else:
+        dudosas.append(n)
+
+if dudosas:
+    print(f"    {len(dudosas)} voces son distintas de las del repositorio (cambiaron en Juglar, o las cambiaste tú):")
+    print("      " + ", ".join(dudosas))
+    resp = os.environ["ACTUALIZAR"]
+    if not resp and os.environ["INTERACTIVO"] == "1":
+        try:  # el código de este script llega por stdin: la respuesta se lee del terminal
+            with open("/dev/tty") as tty:
+                print("    ¿Cambiarlas por las del repositorio? Se guarda una copia de las tuyas [s/N] ", end="", flush=True)
+                resp = tty.readline()
+        except OSError:
+            resp = ""
+    if resp.strip().lower() in ("s", "si", "sí", "y", "1"):
+        for n in dudosas:
+            actualizar(n)
+        actualizadas += dudosas
+    else:
+        print("    Se dejan como están (para cambiarlas: ACTUALIZAR_VOCES=1 ./install.sh)")
+
+reg_path.write_text(json.dumps(reg, indent=1))
+total = sum(1 for p in data.iterdir() if p.is_dir())
+print(f"    {len(nuevas)} voces nuevas y {len(actualizadas)} actualizadas ({total} en total)")
+if actualizadas:
+    print(f"    Copia de las que se cambiaron en {copia}")
+EOF
 [[ -e "$CONFIG/pronunciacion.txt" ]] || cp "$R/juglar/pronunciacion.txt" "$CONFIG/pronunciacion.txt"
 [[ -e "$CONFIG/prueba_voz.txt" ]] || cp "$R/juglar/prueba_voz.txt" "$CONFIG/prueba_voz.txt"
 
