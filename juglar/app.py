@@ -738,15 +738,15 @@ class JuglarWindow(Adw.ApplicationWindow):
                 numeros[int(n.group(1))] = numeros.get(int(n.group(1)), 0) + 1
             else:
                 sin_marca += 1
-        lines, perfiles = [], set(md2audio.qwen_profiles())
+        lines, alias = [], md2audio.marcas_voces()
         for key, count in sorted(nombres.items()):
             ficha = cast.get(key)
             if ficha:
                 base = short_label("qwen:" + ficha["voz"])
                 desc = ficha["nombre"] if base == ficha["nombre"] else f"{ficha['nombre']} · voz {base}"
                 lines.append((f"—@{key}", desc, count, False))
-            elif key in perfiles:
-                lines.append((f"—@{key}", f"Voz {short_label('qwen:' + key)}", count, False))
+            elif key in alias:
+                lines.append((f"—@{key}", f"Voz {short_label('qwen:' + alias[key])}", count, False))
             else:
                 lines.append((f"—@{key}", "no existe: créalo en Voces", count, True))
         for num, count in sorted(numeros.items()):

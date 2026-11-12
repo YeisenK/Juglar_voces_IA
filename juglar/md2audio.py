@@ -259,6 +259,24 @@ def elenco():
     return {k: f for k, f in _json(ELENCO).items() if f.get("voz") in perfiles}
 
 
+def marcas_voces():
+    """{marca: perfil} para escribir —@marca con una voz de Qwen: su carpeta, su nombre visible y ese nombre sin
+    el paréntesis si le quedan al menos dos palabras («Vieja de pueblo (brava)» → vieja_brava, vieja_de_pueblo_brava y vieja_de_pueblo).
+    Un alias que coincide con otra voz o con un personaje, o que comparten dos voces, no se usa."""
+    perfiles, personajes_ = qwen_profiles(), set(_json(ELENCO))
+    marcas, repetidas = {p: p for p in perfiles}, set()
+    for p in perfiles:
+        label = _json(QWEN_VOICES / p / "meta.json").get("label", "")
+        corto = texto_es.slug(re.sub(r"\(.*?\)", "", label))
+        for alias in {texto_es.slug(label), corto if "_" in corto else ""} - {"", p}:  # «mujer» a secas, no
+            if alias in perfiles or alias in personajes_:
+                continue
+            if alias in marcas and marcas[alias] != p:
+                repetidas.add(alias)
+            marcas[alias] = p
+    return {k: v for k, v in marcas.items() if k not in repetidas}
+
+
 def ficha_ajustes(ficha, override=None):
     """Ajustes de lectura de un personaje: los de su voz base con sus propios cambios encima."""
     base = qwen_settings(ficha["voz"], override)
@@ -747,7 +765,8 @@ def main():
     mapa_personajes = personajes() if qwen else {}
     nombres = elenco()
     # —@nombre también vale con el nombre de una voz (—@tabernero) aunque no sea un personaje; el personaje manda
-    marcables = set(nombres) | (set(qwen_profiles()) if qwen else set())
+    alias = marcas_voces() if qwen else {}
+    marcables = set(nombres) | set(alias)
     libro = libro_settings()
     prep = (lambda t: t) if a.literal or not libro["normalizar_texto"] else texto_es.normalizar
     for kind, text in segs:
@@ -761,7 +780,7 @@ def main():
         if kind == "p" and text.lstrip()[:1] in "—–":
             if qwen and not flash:
                 trozos = texto_es.dividir_dialogo(text, validas=set(mapa_personajes), nombres=marcables)
-                voces = [(((("@" + num) if num in nombres else num) if isinstance(num, str) else mapa_personajes.get(num))
+                voces = [(((("@" + num) if num in nombres else alias[num]) if isinstance(num, str) else mapa_personajes.get(num))
                           if num else voz_dialogo)
                          if rol == "dialogo" else None for rol, _t, num in trozos]
                 if any(v and v != propia for v in voces):  # solo se trocea si de verdad cambia la voz
