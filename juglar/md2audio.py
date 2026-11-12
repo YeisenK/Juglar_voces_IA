@@ -108,6 +108,7 @@ def clean_inline(s: str) -> str:
 
 
 def end_punct(s: str) -> str:
+    s = s.rstrip(",")  # «—dijo Gaia—, que…»: la acotación suelta acaba en punto, no en «,.»
     return s if not s or s[-1] in ".!?…:;¡¿" else s + "."
 
 
