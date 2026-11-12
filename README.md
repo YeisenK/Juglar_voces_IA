@@ -35,7 +35,7 @@ Los juglares iban de pueblo en pueblo contando historias y dando voz a cada pers
 ## Instalación
 
 ```bash
-git clone git@github.com:YeisenK/Juglar.git
+git clone git@github.com:YeisenK/Juglar_voces_IA.git
 cd Juglar
 ./install.sh
 ```

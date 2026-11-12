@@ -21,7 +21,7 @@ from gi.repository import Adw, GObject, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 APP_ID = "io.github.yeisenk.Juglar"
 ICON = "io.github.yeisenk.Juglar"
 VERSION = "2.0"
-WEBSITE = "https://github.com/YeisenK/Juglar"
+WEBSITE = "https://github.com/YeisenK/Juglar_voces_IA"
 APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 import rutas  # noqa: E402
