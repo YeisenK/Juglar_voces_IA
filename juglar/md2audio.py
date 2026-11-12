@@ -59,6 +59,7 @@ QWEN_DEFAULTS = {
     "recortar_silencios": True,   # quita el silencio que deja el modelo; las pausas son las de arriba
     "nivelar": True,              # igualar el volumen de los fragmentos al guardar
     "normalizar_texto": True,     # pasar números, fechas, abreviaturas… a palabras
+    "flash": False,               # modo flash: sin revisar con Whisper y todo con la voz del narrador
 }
 VOICE_KEYS = ("temperature", "top_p", "top_k", "repetition_penalty")   # lo que se ajusta voz a voz
 WHISPER_PY = rutas.WHISPER_PY
@@ -676,6 +677,9 @@ def main():
     ap.add_argument("--literal", action="store_true", help="leer el texto tal cual, sin pasar números, fechas, abreviaturas, etc. a palabras")
     ap.add_argument("--sin-nivelar", action="store_true", help="no igualar el volumen de los fragmentos")
     ap.add_argument("--no-revisar", action="store_true", help="con Qwen: no comprobar el audio con Whisper")
+    ap.add_argument("--flash", action="store_true",
+                    help="con Qwen: modo rápido, sin revisar con Whisper y todo con la voz del narrador")
+    ap.add_argument("--sin-flash", action="store_true", help="ignorar el modo flash guardado en los ajustes")
     ap.add_argument("--voz-dialogo", metavar="VOZ", help="con Qwen: voz que lee los diálogos (rayas), p. ej. qwen:narradora")
     ap.add_argument("--cpu", action="store_true", help="no usar la GPU aunque esté disponible")
     ap.add_argument("--all-kokoro", action="store_true", help="con --list-voices: incluye voces de Kokoro de otros idiomas")
@@ -732,11 +736,13 @@ def main():
     # Qwen: fragmentos medianos, que en lote ocupan memoria parecida y no se desvían en textos largos
     qcfg = qwen_cfg(a) if qwen else None
     chunk_limit = 200 if a.raw else (qcfg["fragmento"] if qwen else MAX_CHUNK)
+    # Modo flash: ni Whisper ni voces de personajes; las marcas (—2, —@leonor) se quitan y lo lee todo el narrador
+    flash = qwen and not a.sin_flash and (a.flash or bool(qcfg["flash"]))
 
     # Trabajos: (texto, silencio_antes_seg, silencio_después_seg, título_capítulo)
     jobs = []
     escena = qcfg["pausa_escena"] if qwen else PAUSA_ESCENA
-    voz_dialogo = qcfg["voz_dialogo"] if qwen and qcfg["voz_dialogo"] in qwen_profiles() else None
+    voz_dialogo = qcfg["voz_dialogo"] if qwen and not flash and qcfg["voz_dialogo"] in qwen_profiles() else None
     propia = a.voice.split(":", 1)[-1]
     mapa_personajes = personajes() if qwen else {}
     nombres = elenco()
@@ -751,7 +757,7 @@ def main():
         # (voz, texto): los párrafos con rayas se reparten entre narrador y personajes (—1, —2… eligen la voz)
         piezas = [(None, prep(text))]  # el título del capítulo se queda como está escrito
         if kind == "p" and text.lstrip()[:1] in "—–":
-            if qwen:
+            if qwen and not flash:
                 trozos = texto_es.dividir_dialogo(text, validas=set(mapa_personajes), nombres=set(nombres))
                 voces = [((("@" + num) if isinstance(num, str) else mapa_personajes.get(num)) if num else voz_dialogo)
                          if rol == "dialogo" else None for rol, _t, num in trozos]
@@ -760,7 +766,7 @@ def main():
                 else:
                     piezas = [(None, prep(texto_es.quitar_marca(text, set(mapa_personajes), set(nombres))[0]))]
             else:
-                piezas = [(None, prep(texto_es.quitar_marca(text, MARCAS_VALIDAS, set(nombres))[0]))]
+                piezas = [(None, prep(texto_es.quitar_marca(text, set(mapa_personajes) if qwen else MARCAS_VALIDAS, set(nombres))[0]))]
         for n, (voz, spoken) in enumerate(piezas):
             parts = split_long(spoken, chunk_limit)
             for k, part in enumerate(parts):
@@ -820,7 +826,7 @@ def main():
                 stack.callback(engine.close)
                 globals()["device"] = "GPU"  # Qwen siempre genera en la tarjeta gráfica
                 qcfg_run = qwen_cfg(a)
-                if qcfg_run["revisar"] and not a.no_revisar and WHISPER_PY.exists() and WHISPER_WORKER.exists():
+                if qcfg_run["revisar"] and not a.no_revisar and not flash and WHISPER_PY.exists() and WHISPER_WORKER.exists():
                     rev = Revisor(rate)
                     stack.callback(rev.close)
                     results = qwen_revisados(engine, rev, [j[0] for j in jobs], [j[4] for j in jobs], qcfg_run, revision)

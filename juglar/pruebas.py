@@ -90,7 +90,7 @@ def comando(nombre, args):
     DIR.mkdir(parents=True, exist_ok=True)
     fuente = DIR / "_texto.md"
     fuente.write_text(texto(), encoding="utf-8")
-    return [str(VENV_PY), "-I", str(MD2AUDIO), str(fuente), "-o", str(DIR / f"_{nombre}.wav"), *args]
+    return [str(VENV_PY), "-I", str(MD2AUDIO), str(fuente), "-o", str(DIR / f"_{nombre}.wav"), "--sin-flash", *args]
 
 
 def terminar(nombre, clave):

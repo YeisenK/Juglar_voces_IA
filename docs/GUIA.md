@@ -221,6 +221,7 @@ Qué pasará al leerlo:
 3. Escucha un trozo con **Leer** (`Ctrl+Intro` para leer/pausar, `Esc` para detener).
 4. Cuando te guste, pulsa **Exportar a audio…** (`Ctrl+Mayús+E`) o añade el archivo en la pestaña **Exportar**. Se convierte en segundo plano, aunque cierres la ventana.
 5. Para audiolibros largos, deja activado **Revisar con Whisper** (pestaña *Audiolibro*): escucha cada fragmento y regenera los que salgan mal.
+6. ¿Prisa? Activa **⚡ Modo flash** (arriba en la pestaña *Audiolibro*): no se revisa con Whisper y todo lo lee el narrador; las marcas `—2` y `—@leonor` se quitan y no se leen. También desde la terminal: `md2audio libro.md --flash`.
 
 ### Atajos
 

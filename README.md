@@ -64,7 +64,7 @@ Abre **Juglar** desde el menú de aplicaciones o escribe `juglar`. La app tiene 
 | **Leer** | Escribir, pegar o abrir un texto y escucharlo. A la derecha, *Propiedades*: duración estimada, quién habla en el texto y **Exportar a audio…** |
 | **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. Elige narrador, formato y velocidad. |
 | **Voces** | Escuchar cada voz o personaje (*Probar*), ajustar su temperatura, crear personajes con nombre y voces nuevas. |
-| **Audiolibro** | Pausas, voz de los diálogos, revisión con Whisper, volumen y diccionario de pronunciación. |
+| **Audiolibro** | Modo flash, pausas, voz de los diálogos, revisión con Whisper, volumen y diccionario de pronunciación. |
 
 Atajos: `Ctrl+Intro` leer/pausar · `Esc` detener · `Ctrl+O` abrir y leer · `Ctrl+Mayús+E` exportar · `Ctrl+1…4` cambiar de pestaña.
 

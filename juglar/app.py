@@ -1577,6 +1577,14 @@ class JuglarWindow(Adw.ApplicationWindow):
         outer.append(page)
         self.libro_widgets = {}
 
+        fast = Adw.PreferencesGroup()
+        row = Adw.SwitchRow(title="⚡ Modo flash",
+                            subtitle="Más rápido: no se revisa con Whisper y todo lo lee el narrador "
+                                     "(se ignoran las voces de los diálogos y personajes)")
+        fast.add(row)
+        self.libro_widgets["flash"] = row
+        page.add(fast)
+
         pauses = Adw.PreferencesGroup(title="Pausas",
                                       description="Silencio que se deja al leer un libro con las voces de Qwen.")
         for key, title, sub, hi in (
@@ -1598,6 +1606,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.dialog_row = Adw.ComboRow(title="Voz de los diálogos", enable_search=True)
         dialogs.add(self.dialog_row)
         page.add(dialogs)
+        self.dialogs_group = dialogs
 
         quality = Adw.PreferencesGroup(title="Calidad del audio")
         for key, title, sub in (
@@ -1629,7 +1638,14 @@ class JuglarWindow(Adw.ApplicationWindow):
             for w in self.libro_widgets.values():
                 w.connect("value-changed" if isinstance(w, Gtk.Scale) else "notify::active", self.on_libro_changed)
             self.dialog_row.connect("notify::selected", self.on_libro_changed)
+        self.update_flash_ui()
         self.loading = was
+
+    def update_flash_ui(self):
+        """En modo flash, lo que no se usa (Whisper y las voces de los diálogos) se ve apagado."""
+        flash = self.libro_widgets["flash"].get_active()
+        self.libro_widgets["revisar"].set_sensitive(not flash)
+        self.dialogs_group.set_sensitive(not flash)
 
     def on_libro_changed(self, *_):
         if self.loading:
@@ -1639,6 +1655,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         names, i = md2audio.qwen_profiles(), self.dialog_row.get_selected()
         cfg["voz_dialogo"] = names[i - 1] if 0 < i <= len(names) else None
         save_libro(cfg)
+        self.update_flash_ui()
         self.update_voice_subtitles()
         self.update_stats()
 
