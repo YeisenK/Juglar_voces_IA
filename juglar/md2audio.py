@@ -746,6 +746,8 @@ def main():
     propia = a.voice.split(":", 1)[-1]
     mapa_personajes = personajes() if qwen else {}
     nombres = elenco()
+    # —@nombre también vale con el nombre de una voz (—@tabernero) aunque no sea un personaje; el personaje manda
+    marcables = set(nombres) | (set(qwen_profiles()) if qwen else set())
     libro = libro_settings()
     prep = (lambda t: t) if a.literal or not libro["normalizar_texto"] else texto_es.normalizar
     for kind, text in segs:
@@ -758,15 +760,16 @@ def main():
         piezas = [(None, prep(text))]  # el título del capítulo se queda como está escrito
         if kind == "p" and text.lstrip()[:1] in "—–":
             if qwen and not flash:
-                trozos = texto_es.dividir_dialogo(text, validas=set(mapa_personajes), nombres=set(nombres))
-                voces = [((("@" + num) if isinstance(num, str) else mapa_personajes.get(num)) if num else voz_dialogo)
+                trozos = texto_es.dividir_dialogo(text, validas=set(mapa_personajes), nombres=marcables)
+                voces = [(((("@" + num) if num in nombres else num) if isinstance(num, str) else mapa_personajes.get(num))
+                          if num else voz_dialogo)
                          if rol == "dialogo" else None for rol, _t, num in trozos]
                 if any(v and v != propia for v in voces):  # solo se trocea si de verdad cambia la voz
                     piezas = [(v if v != propia else None, end_punct(prep(t))) for v, (_r, t, _n) in zip(voces, trozos)]
                 else:
-                    piezas = [(None, prep(texto_es.quitar_marca(text, set(mapa_personajes), set(nombres))[0]))]
+                    piezas = [(None, prep(texto_es.quitar_marca(text, set(mapa_personajes), marcables)[0]))]
             else:
-                piezas = [(None, prep(texto_es.quitar_marca(text, set(mapa_personajes) if qwen else MARCAS_VALIDAS, set(nombres))[0]))]
+                piezas = [(None, prep(texto_es.quitar_marca(text, set(mapa_personajes) if qwen else MARCAS_VALIDAS, marcables)[0]))]
         for n, (voz, spoken) in enumerate(piezas):
             parts = split_long(spoken, chunk_limit)
             for k, part in enumerate(parts):
