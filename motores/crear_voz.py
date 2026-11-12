@@ -3,7 +3,8 @@
 
 Uso: crear_voz.py TRABAJOS.json
   TRABAJOS.json: [{"id": "anciano", "label": "Anciano", "descripcion": "Anciano de unos 75 años…", "semilla": 1,
-                   "texto": "frase de referencia (opcional, 7-10 s)"}, …]
+                   "texto": "frase de referencia (opcional, 7-10 s)",
+                   "instruccion": "la descripción para el modelo, si se quiere otra (opcional)"}, …]
 Cada voz queda en <JUGLAR_DATA>/voces/<id>/ (ref.wav, ref.txt, meta.json) lista para usarse como cualquier otra.
 Se ejecuta con el Python del entorno de Qwen (<JUGLAR_DATA>/qwen). Por stdout: una línea JSON por voz.
 """
@@ -44,7 +45,9 @@ def main():
         try:
             torch.manual_seed(int(job.get("semilla", 1234)))
             texto = job.get("texto") or TEXTO   # una frase dicha por el personaje le da su carácter a la voz
-            wavs, sr = model.generate_voice_design(text=texto, language="Spanish", instruct=job["descripcion"])
+            # «instruccion»: lo que se le pide al modelo (mejor en inglés); «descripcion»: lo que se muestra en la app
+            wavs, sr = model.generate_voice_design(text=texto, language="Spanish",
+                                                   instruct=job.get("instruccion") or job["descripcion"])
             dest = VOCES / job["id"]
             dest.mkdir(parents=True, exist_ok=True)
             sf.write(dest / "ref.wav", wavs[0], sr)

@@ -155,27 +155,27 @@ Cada uno tiene **su propia voz**, creada a partir de la descripción que me dist
 
 | Escribe | Personaje | Cómo suena |
 |---|---|---|
-| `—@cid` | Cid | ~35, barítono firme, arrogante y seguro, cortante al mandar. |
-| `—@cid_version_2` | Cid (versión 2) | ~30, barítono brillante y potente, risa burlona, salvaje. Elige la que prefieras. |
-| `—@dona_huma` | Doña Huma | ~65, suave, baja de volumen, irónica, nunca levanta la voz. |
+| `—@cid` | Cid | ~30, conquistador: barítono potente y brillante, arrogante y carismático, risas sonoras, un punto salvaje. |
+| `—@cid_version_2` | Cid (versión 2) | Otra toma del Cid, creada antes: ~30, barítono brillante, burlón y salvaje. Quédate con la que prefieras. |
+| `—@dona_huma` | Doña Huma | ~65, de origen árabe o persa: habla un español excelente con un ligero acento; suave, irónica, nunca levanta la voz. |
 | `—@galindo` | Galindo | ~85, ronca y temblorosa, viejo soldado gruñón («¡mal rayo!»). |
 | `—@pedro` | Pedro | ~40, grave y opaca, de artesano, pocas palabras, tristeza contenida. |
 | `—@bermudo` | Bermudo | ~45, tenor grave, culto, amable, algo melancólico. |
 | `—@arnau` | Arnau | ~50, sargento ronco y fuerte, malhablado, acento de costa. |
-| `—@tri` | Tri | ~22, clara y cálida, curioso, duda y se atropella. |
-| `—@tri_falso` | Tri falso | La voz de Tri, pero calmada, plana y demasiado suave. |
-| `—@leonor` | Leonor | ~20, viva y aguda, práctica, un poco burlona. |
-| `—@myria` | Myria | ~22, noble, suave y contenida, melancólica. |
-| `—@luca` | Luca | ~35, barítono cálido y cansado, risa nerviosa. |
-| `—@maia` | Maia | ~30, cálida, parlanchina, lúcida, firme cuando hace falta. |
-| `—@maximo` | Máximo | ~60, bajo profundo, pocas palabras, se exalta a ratos. |
-| `—@helena` | Helena | ~55, alto cálida y maternal, algo susurrante. |
-| `—@gaia` | Gaia | ~21, enérgica, algo ronca, juguetona, ríe fácil. |
-| `—@seranith` | Seraníth | Sin edad, mezzo clara y fría, dicción formal y precisa. |
-| `—@aelia` | Aelia | Reina antigua, grave y etérea, muy lenta, casi susurrada. |
-| `—@celso_maran` | Celso Marán | ~60, seca y neutra, sin emoción, como quien lee un informe. |
-| `—@remo_armen` | Remo Armen | ~55, bajo retumbante, lento y amable, fuerza tranquila. |
-| `—@micael` | Micael | ~28, firme y seria, frases cortas, autoridad tranquila. |
+| `—@tri` | Tri | ~22, claro y cálido, curioso; se atropella cuando se entusiasma y duda con pausas cortas. |
+| `—@tri_falso` | Tri falso | La misma voz de Tri, pero lisa y uniforme, sin dudas: tranquila e inquietante por lo perfecta. |
+| `—@leonor` | Leonor | ~20, viva y brillante, práctica y directa, algo burlona; rápida y cortante cuando tiene miedo. |
+| `—@myria` | Myria | ~22, noble: suave y aterciopelada, lenta y contenida, melancólica. |
+| `—@luca` | Luca | ~35, heredero: barítono cálido y cansado, risa nerviosa por la nariz, seco cuando hay tensión. |
+| `—@maia` | Maia | ~30, cálida y parlanchina, cuenta anécdotas; pasa en un instante a un tono bajo y firme. |
+| `—@maximo` | Máximo | ~60, emperador: bajo profundo y lento, pocas palabras; a ratos eufórico, ríe fuerte. |
+| `—@helena` | Helena | ~55, emperatriz: contralto cálida y algo susurrante, maternal, frases cortas cuando algo importa. |
+| `—@gaia` | Gaia | ~21, enérgica, algo ronca, franca y de risa fácil; le cuesta ser formal. |
+| `—@seranith` | Seraníth | Sin edad: mezzo clara y fría, dicción formal y precisa, orgullo de guerrera. |
+| `—@aelia` | Aelia | Casi dos mil años: grave, etérea, muy lenta y casi susurrada, cadencia poética. |
+| `—@celso_maran` | Celso Marán | ~60, jefe de espías: seca, neutra y olvidable, como quien lee un informe. |
+| `—@remo_armen` | Remo Armen | ~55, mitad oso: bajo muy profundo y retumbante, lento, amable y directo. |
+| `—@micael` | Micael | ~28, capitán: firme y sobrio, frases cortas, autoridad tranquila. |
 
 Puedes cambiar la temperatura y la velocidad de cada personaje en la pestaña **Voces** (aparecen arriba de la lista, bajo «Personajes»). Los cambios no se aplican hasta que pulsas **Guardar** (`Ctrl+S`), que se ilumina en azul cuando hay algo sin guardar; **Probar** ya suena con lo que estás tocando. Con **Borrar…** se manda una voz a la papelera.
 
