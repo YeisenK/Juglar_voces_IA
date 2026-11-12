@@ -139,3 +139,8 @@ toast { border-radius: 6px; }
 .browser row .title { font-size: 13px; }
 .browser row .subtitle { font-size: 11px; color: #5aa2f7; }
 .transport scale { min-width: 150px; }
+
+/* ---- guardar: se ilumina solo con cambios pendientes ---- */
+.unsaved { color: #e68619; font-size: 12px; font-weight: 700; }
+.strip button.save:disabled { opacity: 0.45; }
+.strip button.save.suggested-action { box-shadow: 0 0 0 2px rgba(38, 128, 235, 0.35), 0 0 14px rgba(38, 128, 235, 0.45); }

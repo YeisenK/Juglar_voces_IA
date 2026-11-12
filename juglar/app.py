@@ -426,6 +426,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.stats_source = None
         self.generating = set()      # pruebas de voz que se están generando ahora
         self.preview_spec = None     # voz o personaje cuya prueba está sonando
+        self.dirty_spec = None       # voz o personaje con ajustes cambiados y sin guardar
         self.cols = {k: Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
                      for k in ("estado", "voz", "progreso", "tiempo", "acciones")}
 
@@ -504,6 +505,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         keys = Gtk.ShortcutController()
         shortcuts = [("<Control>Return", lambda: self.on_play_clicked(None)), ("Escape", self.stop),
                      ("<Control>o", lambda: self.on_read_file(None)),
+                     ("<Control>s", lambda: self.save_changes()),
                      ("<Control><Shift>e", lambda: self.on_export_text(None))]
         shortcuts += [(f"<Control>{i + 1}", lambda n=name: self.stack.set_visible_child_name(n))
                       for i, (name, _t, _i) in enumerate(PAGES)]
@@ -856,6 +858,16 @@ class JuglarWindow(Adw.ApplicationWindow):
         right.append(tool_button("list-add-symbolic", "Nuevo personaje",
                                  "Un personaje es una voz con su nombre y sus ajustes guardados",
                                  self.on_new_character, "flat"))
+        self.unsaved_label = label("● Cambios sin guardar", "unsaved", visible=False, valign=Gtk.Align.CENTER)
+        right.append(self.unsaved_label)
+        self.discard_btn = tool_button("edit-undo-symbolic", "Descartar", "Volver a lo que estaba guardado",
+                                       self.discard_changes, "flat")
+        self.discard_btn.set_visible(False)
+        right.append(self.discard_btn)
+        self.save_btn = tool_button("document-save-symbolic", "Guardar", "Guardar los cambios de esta voz (Ctrl+S)",
+                                    lambda *_: self.save_changes(), "save")
+        self.save_btn.set_sensitive(False)
+        right.append(self.save_btn)
         self.create_btn = tool_button("audio-input-microphone-symbolic", "Crear voz…",
                                       "Inventa una voz nueva a partir de una descripción", self.on_create_voice, "flat")
         right.append(self.create_btn)
@@ -921,8 +933,9 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.voice_group.add(self.save_char_row)
         page.add(self.voice_group)
 
-        self.voice_sound = SoundControls("Cómo suena", "Cada voz tiene sus propios ajustes. Se guardan al moverlos.",
-                                         self.save_voice_sound)
+        self.voice_sound = SoundControls("Cómo suena", "Cada voz tiene sus propios ajustes. Pulsa «Guardar» "
+                                         "(arriba) para conservarlos; «Probar» ya usa lo que estás tocando.",
+                                         self.mark_dirty)
         page.add(self.voice_sound.group)
 
         self.num_group = Adw.PreferencesGroup(
@@ -933,6 +946,15 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.num_row.connect("notify::selected", self.on_number_changed)
         self.num_group.add(self.num_row)
         page.add(self.num_group)
+
+        self.del_voice_group = Adw.PreferencesGroup()
+        row = Adw.ActionRow(title="Borrar esta voz", subtitle="Se mueve a la papelera; desde ahí se puede recuperar")
+        btn = Gtk.Button(label="Borrar…", valign=Gtk.Align.CENTER)
+        btn.add_css_class("destructive-action")
+        btn.connect("clicked", self.on_delete_voice)
+        row.add_suffix(btn)
+        self.del_voice_group.add(row)
+        page.add(self.del_voice_group)
         return page
 
     def build_character_detail(self):
@@ -966,8 +988,8 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.char_group.add(play_row)
         page.add(self.char_group)
 
-        self.char_sound = SoundControls("Cómo suena", "Se guardan con el nombre del personaje.", self.save_character,
-                                        speed=True)
+        self.char_sound = SoundControls("Cómo suena", "Pulsa «Guardar» (arriba) para conservarlos con el nombre "
+                                        "del personaje.", self.mark_dirty, speed=True)
         page.add(self.char_sound.group)
 
         danger = Adw.PreferencesGroup()
@@ -1050,6 +1072,10 @@ class JuglarWindow(Adw.ApplicationWindow):
     def on_voice_row_selected(self, _lb, row):
         if row is None or self.syncing:
             return
+        if self.dirty_spec and self.dirty_spec != row.spec:
+            prev = self.dirty_spec
+            self.ask_unsaved(lambda: self.on_voice_row_selected(None, row), cancel=lambda: self.select_spec(prev))
+            return
         self.syncing = True
         self.voice_pick.set_selected(self.entry_specs.index(row.spec))
         self.syncing = False
@@ -1076,6 +1102,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.voice_group.set_description(meta.get("descripcion") or f"Motor {engine_of(spec)}")
         self.voice_sound.group.set_visible(name is not None)
         self.num_group.set_visible(name is not None)
+        self.del_voice_group.set_visible(name is not None)
         self.save_char_row.set_visible(name is not None)
         self.refresh_use_button()
         self.update_try_buttons()
@@ -1103,10 +1130,133 @@ class JuglarWindow(Adw.ApplicationWindow):
         if self.sel_voice and not self.sel_voice.startswith("personaje:"):
             self.refresh_use_button()
 
-    def save_voice_sound(self):
+    # --- cambios sin guardar de la voz o el personaje abierto
+    def mark_dirty(self, *_):
+        if self.loading or not self.sel_voice:
+            return
+        self.dirty_spec = self.sel_voice
+        self.update_save_ui()
+
+    def update_save_ui(self):
+        dirty = self.dirty_spec is not None
+        self.save_btn.set_sensitive(dirty)
+        (self.save_btn.add_css_class if dirty else self.save_btn.remove_css_class)("suggested-action")
+        self.discard_btn.set_visible(dirty)
+        self.unsaved_label.set_visible(dirty)
+
+    def save_changes(self):
+        """Guarda los ajustes de la voz o del personaje abierto."""
+        spec = self.dirty_spec
+        if spec is None:
+            return
+        if spec.startswith("personaje:"):
+            slug, cast, names = spec.split(":", 1)[1], load_elenco(), self.base_names()
+            if slug in cast:
+                cast[slug].update(self.char_sound.values())
+                if 0 <= self.base_row.get_selected() < len(names):
+                    cast[slug]["voz"] = names[self.base_row.get_selected()]
+                save_elenco(cast)
+            nombre = cast.get(slug, {}).get("nombre", slug)
+        else:
+            save_voice_settings(qwen_name(spec), self.voice_sound.values())
+            nombre = short_label(spec)
+        self.dirty_spec = None
+        self.update_save_ui()
+        self.update_voice_subtitles()
+        self.update_stats()
+        self.toast(f"Cambios de «{nombre}» guardados")
+
+    def discard_changes(self, *_):
+        spec, self.dirty_spec = self.dirty_spec, None
+        self.update_save_ui()
+        if spec and spec == self.sel_voice:
+            self.show_voice(spec)
+
+    def ask_unsaved(self, then, cancel=None):
+        """¿Guardar los cambios pendientes antes de seguir? Guardar / Descartar / Cancelar."""
+        spec = self.dirty_spec
+        nombre = (load_elenco().get(spec.split(":", 1)[1], {}).get("nombre") if spec.startswith("personaje:")
+                  else short_label(spec))
+        dlg = Adw.AlertDialog(heading=f"¿Guardar los cambios de «{nombre}»?",
+                              body="Si no los guardas, la voz se queda como estaba.")
+        dlg.add_response("cancel", "Cancelar")
+        dlg.add_response("discard", "Descartar")
+        dlg.add_response("save", "Guardar")
+        dlg.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("save")
+        dlg.set_close_response("cancel")
+
+        def done(_d, response):
+            if response == "save":
+                self.save_changes()
+            elif response == "discard":
+                self.dirty_spec = None
+                self.update_save_ui()
+            else:
+                if cancel:
+                    cancel()
+                return
+            then()
+        dlg.connect("response", done)
+        dlg.present(self)
+
+    def select_spec(self, spec):
+        """Vuelve a marcar `spec` en la lista sin recargar sus ajustes (al cancelar un cambio de voz)."""
+        if spec in self.entry_specs:
+            self.syncing = True
+            self.voice_list.select_row(self.voice_list.get_row_at_index(self.entry_specs.index(spec)))
+            self.voice_pick.set_selected(self.entry_specs.index(spec))
+            self.syncing = False
+
+    # --- borrar una voz de Qwen
+    def on_delete_voice(self, _btn):
         name = qwen_name(self.sel_voice)
-        if not self.loading and name:
-            save_voice_settings(name, self.voice_sound.values())
+        if not name:
+            return
+        usan = [f["nombre"] for f in load_elenco().values() if f.get("voz") == name]
+        body = "La carpeta de la voz se mueve a la papelera; desde ahí puedes recuperarla."
+        if usan:
+            body += f"\n\nEstos personajes usan esta voz y también se borrarán: {', '.join(usan)}."
+        if self.sel_voice == self.current_voice():
+            body += "\n\nEs el narrador actual: se elegirá otra voz."
+        dlg = Adw.AlertDialog(heading=f"¿Borrar la voz «{short_label(self.sel_voice)}»?", body=body)
+        dlg.add_response("cancel", "Cancelar")
+        dlg.add_response("ok", "Borrar")
+        dlg.set_response_appearance("ok", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_close_response("cancel")
+        dlg.connect("response", lambda _d, r: r == "ok" and self.delete_voice(name))
+        dlg.present(self)
+
+    def delete_voice(self, name):
+        """Manda la voz a la papelera y quita todo lo que la usaba (números, diálogos, personajes, pruebas)."""
+        folder = md2audio.QWEN_VOICES / name
+        try:
+            Gio.File.new_for_path(str(folder)).trash(None)
+        except GLib.Error as e:
+            self.toast(f"No se pudo borrar: {e.message}")
+            return
+        mapa = {n: v for n, v in md2audio.personajes().items() if v != name}
+        write_json(md2audio.PERSONAJES, {str(n): v for n, v in sorted(mapa.items())})
+        libro = md2audio._json(md2audio.LIBRO_FILE)
+        if libro.get("voz_dialogo") == name:
+            libro.pop("voz_dialogo")
+            write_json(md2audio.LIBRO_FILE, libro)
+        cast = load_elenco()
+        for slug in [k for k, f in cast.items() if f.get("voz") == name]:
+            cast.pop(slug)
+            for f in pruebas.DIR.glob(f"personaje_{slug}.*"):
+                f.unlink(missing_ok=True)
+        save_elenco(cast)
+        for f in pruebas.DIR.glob(f"qwen_{name}.*"):
+            f.unlink(missing_ok=True)
+        self.dirty_spec = None
+        self.update_save_ui()
+        self.sel_voice = self.sel_char = None
+        self.reload_voices()
+        self.fill_voice_list()
+        self.update_stats()
+        self.toast(f"Voz borrada (está en la papelera)")
 
     def on_number_changed(self, *_):
         name = qwen_name(self.sel_voice)
@@ -1144,23 +1294,8 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.char_sound.load({**md2audio.ficha_ajustes(f), "velocidad": f.get("velocidad", 1.0)})
         self.update_try_buttons()
 
-    def save_character(self):
-        slug = self.sel_char
-        cast = load_elenco()
-        if self.loading or slug not in cast:
-            return
-        cast[slug].update(self.char_sound.values())
-        save_elenco(cast)
-
     def on_char_base_changed(self, *_):
-        slug, names = self.sel_char, self.base_names()
-        cast = load_elenco()
-        if self.loading or slug not in cast or not 0 <= self.base_row.get_selected() < len(names):
-            return
-        cast[slug]["voz"] = names[self.base_row.get_selected()]
-        save_elenco(cast)
-        self.update_voice_subtitles()
-        self.update_stats()
+        self.mark_dirty()
 
     def on_char_rename(self, row):
         old, cast = self.sel_char, load_elenco()
@@ -1194,6 +1329,19 @@ class JuglarWindow(Adw.ApplicationWindow):
     def try_sample(self, spec, nombre):
         if self.proc and self.preview_spec == spec:  # ya está sonando: el mismo botón pausa y sigue
             self.on_pause_read(None)
+            return
+        if self.dirty_spec == spec:
+            self.stop()
+            if spec.startswith("personaje:"):
+                names = self.base_names()
+                voz = "qwen:" + names[self.base_row.get_selected()]
+                vals = self.char_sound.values()
+                speed = vals.pop("velocidad", 1.0)
+            else:
+                voz, vals, speed = spec, self.voice_sound.values(), 1.0
+            self.play(pruebas.texto(), voice=voz, status=f"Probando cambios de {nombre}…",
+                      extra=["--qwen-ajustes", json.dumps(vals)], speed_mul=speed / self.speed_adj.get_value(),
+                      preview=spec)
             return
         r = pruebas.receta(spec)
         if r is None:
@@ -1266,6 +1414,9 @@ class JuglarWindow(Adw.ApplicationWindow):
         dlg.present(self)
 
     def delete_character(self, slug):
+        if self.dirty_spec == f"personaje:{slug}":
+            self.dirty_spec = None
+            self.update_save_ui()
         cast = load_elenco()
         cast.pop(slug, None)
         save_elenco(cast)
@@ -1789,6 +1940,10 @@ class JuglarWindow(Adw.ApplicationWindow):
 
     # ------------------------------------------------------------ cierre
     def on_close(self, *_):
+        if self.dirty_spec:
+            self.stack.set_visible_child_name("voces")
+            self.ask_unsaved(self.close)
+            return True
         self.stop()  # la cola sigue en segundo plano
         self.cfg.update(voice=self.current_voice(), speed=self.speed_adj.get_value(), text=self.get_text(),
                         audio_ext=FORMATS[self.format_row.get_selected()],

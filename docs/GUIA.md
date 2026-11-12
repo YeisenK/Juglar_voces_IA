@@ -177,7 +177,7 @@ Cada uno tiene **su propia voz**, creada a partir de la descripción que me dist
 | `—@remo_armen` | Remo Armen | ~55, bajo retumbante, lento y amable, fuerza tranquila. |
 | `—@micael` | Micael | ~28, firme y seria, frases cortas, autoridad tranquila. |
 
-Puedes cambiar la temperatura y la velocidad de cada personaje en la pestaña **Voces** (aparecen arriba de la lista, bajo «Personajes»). Con **Probar este personaje** escuchas su prueba de voz al instante.
+Puedes cambiar la temperatura y la velocidad de cada personaje en la pestaña **Voces** (aparecen arriba de la lista, bajo «Personajes»). Los cambios no se aplican hasta que pulsas **Guardar** (`Ctrl+S`), que se ilumina en azul cuando hay algo sin guardar; **Probar** ya suena con lo que estás tocando. Con **Borrar…** se manda una voz a la papelera.
 
 ### 3.3 Voces rápidas (Piper y Kokoro)
 
