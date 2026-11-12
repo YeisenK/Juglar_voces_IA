@@ -10,7 +10,7 @@ Los juglares iban de pueblo en pueblo contando historias y dando voz a cada pers
 
 - **Leer en voz alta** cualquier texto o archivo `.md`/`.txt`, con pausa, código de tiempo y control de velocidad.
 - **Audiolibros con reparto**: el narrador lee la historia y cada diálogo lo dice la voz de su personaje (`—@leonor ¿Tienes miedo?`).
-- **Más de 50 voces** de Qwen3-TTS incluidas (narradores, personajes, voces de pueblo…), más voces rápidas de Piper y Kokoro.
+- **Más de 80 voces** de Qwen3-TTS incluidas (narradores, personajes con nombre y 57 voces para personajes: jóvenes, adultos y viejos, normales, gruñones o alegres, oficios…), más voces rápidas de Piper y Kokoro.
 - **Crea voces nuevas** describiéndolas con palabras: «anciano de 80 años, voz ronca y temblorosa, gruñón».
 - **Personajes con nombre**, cada uno con su voz base, su temperatura y su velocidad.
 - **Cola de exportación** a MP3, OGG, M4B (con capítulos) o WAV, que sigue trabajando en segundo plano aunque cierres la ventana o el equipo esté en reposo.

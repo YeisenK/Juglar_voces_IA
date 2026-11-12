@@ -116,40 +116,90 @@ Cada voz es también un personaje: se escribe con `—@` y su nombre (`—@mujer
 | Narradora de documentales | Mujer ~45, serena, profunda y elegante. |
 | Narrador de documentales | Hombre ~55, profundo, sereno, solemne. |
 
-**Voces generales para personajes**
+**Voces para personajes** — todas en español nativo, con un tono normal de conversación, sin dramatizar.
+Si una voz se renombra en la app, también se puede escribir con su nombre (`—@hombre_viejo` = *Hombre viejo*).
 
-| Voz en la app | Cómo suena |
-|---|---|
-| Adolescente (chica) | 16 años, clara, enérgica, algo sarcástica. |
-| Adolescente (chico) | 16 años, voz que apenas ha cambiado, desafiante. |
-| Niña | ~9 años, dulce, aguda, juguetona. |
-| Niño | ~8 años, aguda, curiosa, traviesa, rápida. |
-| Mujer joven | ~25, clara, natural, decidida. |
-| Hombre joven | ~25, natural, cercano, relajado. |
-| Mujer (México) | ~30, acento mexicano, cálida y alegre. |
-| Hombre (Argentina) | ~35, acento rioplatense, cálido. |
-| Hombre (España) | ~40, acento castellano, cercano. |
-| Mujer misteriosa | ~40, baja, susurrante, enigmática. |
-| Reina | ~55, firme, elegante, fría, de mando. |
-| Guerrero | ~35, fuerte, firme, autoritario. |
-| Hombre gruñón | ~45, áspero, irritable, brusco. |
-| Villano | ~50, muy grave, fría, amenazante, lenta. |
-| Anciana | ~75, suave, quebradiza, maternal. |
-| Anciano | ~75, grave, ronca, cansada, sabia. |
+*Hombres*
 
-**Voces de pueblo** (nuevas)
+| Escribe | Voz en la app | Cómo suena |
+|---|---|---|
+| `—@hombre_joven` | Hombre joven | Hombre joven ~25. Timbre medio, claro y agradable. Tono amable y sencillo. |
+| `—@hombre_joven_alegre` | Hombre joven alegre | Hombre joven ~24. Timbre claro y luminoso. Tono alegre y simpático, con una sonrisa ligera en la voz. |
+| `—@hombre_joven_timido` | Hombre joven tímido | Hombre joven ~22. Timbre suave, de altura media. Tono tímido y algo inseguro, volumen bajo. |
+| `—@hombre_joven_serio` | Hombre joven serio | Hombre joven ~27. Timbre firme y limpio. Tono serio y formal, ritmo pausado. |
+| `—@hombre_joven_grunon` | Hombre joven gruñón | Hombre joven ~25. Timbre medio tirando a grave. Tono algo seco y malhumorado, de pocas palabras, pero sin gritar. |
+| `—@hombre_adulto` | Hombre adulto | Hombre adulto ~40. Timbre grave y claro. Tono tranquilo y normal. |
+| `—@hombre_adulto_amable` | Hombre adulto amable | Hombre adulto ~45. Timbre cálido y grave. Tono amable y paciente. |
+| `—@hombre_adulto_serio` | Hombre adulto serio | Hombre adulto ~50. Timbre grave y firme. Tono serio y sobrio, de pocas palabras. |
+| `—@hombre_grunon` | Hombre gruñón | Hombre adulto ~45. Timbre grave, algo áspero. Tono seco y gruñón, impaciente, pero sin gritar. |
+| `—@anciano` | Hombre viejo | Hombre mayor ~75. Timbre grave, algo gastado. Tono sereno y normal, ritmo pausado. |
+| `—@hombre_viejo_alegre` | Hombre viejo alegre | Hombre mayor ~72. Timbre cálido y algo gastado. Tono alegre y bonachón, de abuelo contento. |
+| `—@hombre_viejo_grunon` | Hombre viejo gruñón | Hombre mayor ~75. Timbre ronco y gastado. Tono gruñón y quejumbroso, de viejo cascarrabias, sin gritar. |
+| `—@pastor_viejo` | Pastor viejo | Hombre mayor ~75, pastor de montaña. Timbre suave y gastado. Tono tranquilo y sencillo, habla despacio. |
 
-| Voz en la app | Cómo suena |
-|---|---|
-| Partera vieja | ~75, contralto ronca y potente, mandona y práctica, acento rural. |
-| Vieja de pueblo (brava) | ~70, grave, fuerte y rasposa, gritona, ríe a carcajadas. |
-| Vieja chismosa | ~70, aguda y algo nasal, rápida, en susurros cómplices. |
-| Herrero | ~45, muy grave, potente y ronca, habla alto, bonachón. |
-| Campesino | ~55, gastada y cálida, lenta, humilde y desconfiada. |
-| Campesina | ~40, clara y fuerte de mercado, respondona y alegre. |
-| Tabernero | ~50, ronca y jovial, bromista. |
-| Pastor viejo | ~75, suave y cascada, lenta, con pausas largas. |
-| Mozo de pueblo | ~16, voz que se quiebra, atropellado y nervioso. |
+*Mujeres*
+
+| Escribe | Voz en la app | Cómo suena |
+|---|---|---|
+| `—@mujer_joven` | Mujer joven | Mujer joven ~25. Timbre medio, claro y agradable. Tono amable y sencillo. |
+| `—@mujer_joven_alegre` | Mujer joven alegre | Mujer joven ~23. Timbre claro y luminoso. Tono alegre y simpático, con una sonrisa ligera en la voz. |
+| `—@mujer_joven_timida` | Mujer joven tímida | Mujer joven ~21. Timbre suave. Tono tímido y algo inseguro, volumen bajo. |
+| `—@mujer_joven_seria` | Mujer joven seria | Mujer joven ~27. Timbre medio tirando a grave, firme. Tono serio y formal, ritmo pausado. |
+| `—@mujer_joven_grunona` | Mujer joven gruñona | Mujer joven ~25. Timbre medio. Tono seco y malhumorado, de pocas palabras, pero sin gritar. |
+| `—@mujer_adulta` | Mujer adulta | Mujer adulta ~40. Timbre medio y claro. Tono tranquilo y normal. |
+| `—@mujer_adulta_amable` | Mujer adulta amable | Mujer adulta ~45. Timbre cálido. Tono amable y maternal. |
+| `—@mujer_adulta_severa` | Mujer adulta severa | Mujer adulta ~50. Timbre firme, algo grave. Tono severo y exigente, sin levantar la voz. |
+| `—@mujer_misteriosa` | Mujer misteriosa | Mujer adulta ~40. Timbre grave y suave. Tono reservado y enigmático, habla bajo y despacio. |
+| `—@anciana` | Mujer vieja | Mujer mayor ~75. Timbre suave, algo gastado. Tono sereno y normal, ritmo pausado. |
+| `—@mujer_vieja_alegre` | Mujer vieja alegre | Mujer mayor ~72. Timbre cálido. Tono alegre y cariñoso, de abuela contenta. |
+| `—@mujer_vieja_grunona` | Mujer vieja gruñona | Mujer mayor ~75. Timbre algo áspero. Tono gruñón y quejumbroso, de vieja cascarrabias, sin gritar. |
+| `—@vieja_brava` | Vieja de pueblo (brava) | Mujer mayor de pueblo ~70. Timbre grave y fuerte. Tono mandón y directo, sin gritar. |
+| `—@vieja_chismosa` | Vieja chismosa | Mujer mayor de pueblo ~70. Timbre algo agudo. Tono curioso y confidencial, de quien cuenta un chisme. |
+| `—@partera_vieja` | Partera vieja | Mujer mayor ~70, partera de pueblo. Timbre firme. Tono práctico y seguro, sin rodeos. |
+
+*Niños y adolescentes*
+
+| Escribe | Voz en la app | Cómo suena |
+|---|---|---|
+| `—@nino` | Niño | Niño ~9. Timbre agudo e infantil. Tono curioso y normal. |
+| `—@nina` | Niña | Niña ~9. Timbre agudo e infantil. Tono dulce y normal. |
+| `—@adolescente_chico` | Adolescente (chico) | Chico adolescente ~15, voz que está cambiando. Tono normal, algo despreocupado. |
+| `—@adolescente_chica` | Adolescente (chica) | Chica adolescente ~15. Timbre claro. Tono normal, algo despreocupado. |
+| `—@mozo_pueblo` | Mozo de pueblo | Muchacho de pueblo ~17. Timbre juvenil. Tono sencillo y servicial. |
+
+*Oficios y gente del reino*
+
+| Escribe | Voz en la app | Cómo suena |
+|---|---|---|
+| `—@guerrero` | Guerrero | Hombre ~35, soldado veterano. Timbre grave y firme. Tono seguro y directo, sin gritar. |
+| `—@soldado_joven` | Soldado joven | Hombre joven ~20, soldado raso. Timbre medio. Tono disciplinado y algo nervioso. |
+| `—@capitan` | Capitán | Hombre ~45, capitán de soldados. Timbre grave y firme. Tono de mando tranquilo y seguro. |
+| `—@guardia` | Guardia | Hombre ~35, guardia de una puerta. Timbre grave. Tono aburrido y desconfiado. |
+| `—@caballerizo` | Caballerizo | Hombre ~30, mozo de cuadras que cuida caballos. Timbre medio y cálido. Tono sencillo y tranquilo. |
+| `—@herrero` | Herrero | Hombre ~45, herrero. Timbre muy grave y potente. Tono campechano y franco. |
+| `—@tabernero` | Tabernero | Hombre ~50, tabernero. Timbre grave y algo ronco. Tono campechano y hospitalario. |
+| `—@tabernera` | Tabernera | Mujer ~40, tabernera. Timbre medio y firme. Tono despierto y hospitalario. |
+| `—@campesino` | Campesino | Hombre ~50, campesino. Timbre gastado y cálido. Tono humilde y sencillo, habla despacio. |
+| `—@campesina` | Campesina | Mujer ~40, campesina. Timbre claro y firme. Tono sencillo y práctico. |
+| `—@mercader` | Mercader | Hombre ~45, mercader. Timbre medio y agradable. Tono cortés y persuasivo. |
+| `—@fraile` | Fraile | Hombre ~55, fraile. Timbre suave y grave. Tono sereno y bondadoso, habla despacio. |
+| `—@criado` | Criado | Hombre ~30, criado de una casa noble. Timbre medio. Tono discreto y respetuoso. |
+| `—@criada` | Criada | Mujer ~25, criada de una casa noble. Timbre suave. Tono discreto y respetuoso. |
+| `—@mensajero` | Mensajero | Hombre joven ~22, mensajero. Timbre claro. Tono rápido y apurado, pero claro. |
+| `—@cocinera` | Cocinera | Mujer ~50, cocinera. Timbre cálido y firme. Tono práctico y bonachón. |
+| `—@noble` | Noble | Hombre ~50, señor noble. Timbre grave y cuidado. Tono educado y seguro. |
+| `—@dama_noble` | Dama noble | Mujer ~40, dama noble. Timbre suave y cuidado. Tono educado y sereno. |
+| `—@rey` | Rey | Hombre ~55, rey. Timbre grave y sereno. Tono de autoridad tranquila. |
+| `—@reina` | Reina | Mujer ~45, reina. Timbre firme y elegante. Tono de autoridad tranquila. |
+| `—@villano` | Villano | Hombre ~50. Timbre grave y frío. Tono calmado y amenazante, habla bajo. |
+
+*Acentos*
+
+| Escribe | Voz en la app | Cómo suena |
+|---|---|---|
+| `—@hombre_argentino` | Hombre (Argentina) | Hombre ~35. Timbre medio y agradable. Tono normal. |
+| `—@hombre_espana` | Hombre (España) | Hombre ~40. Timbre medio y claro. Tono normal. |
+| `—@mujer_mexicana` | Mujer (México) | Mujer ~30. Timbre claro y cálido. Tono normal. |
 
 ### 3.2 Personajes con nombre (para tu libro)
 
