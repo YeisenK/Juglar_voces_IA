@@ -269,11 +269,14 @@ Qué pasará al leerlo:
 ## 5. Flujo de trabajo recomendado
 
 1. **Escribe** tu capítulo en un `.md` con las marcas de diálogo.
-2. Ábrelo en la pestaña **Leer** (`Ctrl+O`) y mira el panel **Propiedades**: comprueba el reparto y los avisos.
+2. Ábrelo en la pestaña **Leer** (`Ctrl+O`) y mira el panel **Propiedades**: comprueba el reparto. Una marca que no existe sale en naranja con sus líneas («no existe (líneas 3, 5)»), y al exportar Juglar te avisa con el archivo y la línea de cada una antes de empezar.
 3. Escucha un trozo con **Leer** (`Ctrl+Intro` para leer/pausar, `Esc` para detener).
 4. Cuando te guste, pulsa **Exportar a audio…** (`Ctrl+Mayús+E`) o añade el archivo en la pestaña **Exportar**. Se convierte en segundo plano, aunque cierres la ventana.
 5. Para audiolibros largos, deja activado **Revisar con Whisper** (pestaña *Audiolibro*): escucha cada fragmento y regenera los que salgan mal.
 6. ¿Prisa? Activa **⚡ Modo flash** (arriba en la pestaña *Audiolibro*): no se revisa con Whisper y todo lo lee el narrador; las marcas `—2` y `—@leonor` se quitan y no se leen. También desde la terminal: `md2audio libro.md --flash`.
+
+7. ¿Un libro entero? Pon los capítulos en una carpeta y usa **Exportar carpeta…** (sección 6).
+8. ¿Una frase salió mal en el audio? No hace falta rehacer el capítulo: **Rehacer un trozo** (sección 7).
 
 ### Atajos
 
@@ -284,3 +287,75 @@ Qué pasará al leerlo:
 | `Ctrl+O` | Abrir y leer un archivo |
 | `Ctrl+Mayús+E` | Exportar el texto a audio |
 | `Ctrl+1` … `Ctrl+4` | Leer · Exportar · Voces · Audiolibro |
+
+## 6. Libros por carpetas
+
+Un libro es **una carpeta**, y cada archivo `.md` o `.txt` dentro de ella es **un capítulo**:
+
+```
+Cid el conquistador/
+├── juglar.json                  (opcional) ajustes del libro
+├── Cid_C1_El_bravo.md           capítulos
+├── Cid_C2_La_sala_grande.md
+├── …
+├── Cid_C10_El_rio.md
+├── _notas.md                    lo que empieza por «_» o «.» no se lee
+└── audio/                       aquí deja Juglar los audios
+    ├── Cid_C1_El_bravo.mp3
+    └── …
+```
+
+**Cómo exportarlo**: en la pestaña **Exportar**, pulsa **Exportar carpeta…** y elige la carpeta (o arrástrala a la cola). Juglar:
+
+1. Busca los capítulos y los **ordena por su nombre en orden natural**: `C2` va antes que `C10`, y `01 …`, `02 …` también funcionan. Para controlar el orden, empieza los nombres con un número.
+2. **Comprueba las marcas** de todo el libro y, si alguna `—@marca` no existe, te dice en qué archivo y línea está.
+3. Si algunos capítulos **ya tienen audio** en `audio/`, te pregunta si exportar **solo los que faltan** o **todos de nuevo**.
+4. Los añade a la cola **en orden**, con el nombre del libro («Cid el conquistador · Cid_C1_El_bravo»).
+
+Desde la terminal hace lo mismo: `juglar-cola libro "Cid el conquistador"` (con `--todo` vuelve a exportar también los que ya tienen audio).
+
+### `juglar.json`: los ajustes del libro (opcional)
+
+Sin este archivo se usan el narrador, el formato y la velocidad elegidos en la app. Con él, cada libro recuerda los suyos:
+
+```json
+{
+  "titulo": "Cid el conquistador",
+  "narrador": "narrador",
+  "formato": "mp3",
+  "velocidad": 1.0,
+  "carpeta_audio": "audio",
+  "omitir": ["Cid_C0_borrador.md"]
+}
+```
+
+| Clave | Qué es | Por defecto |
+|---|---|---|
+| `titulo` | Nombre del libro en la cola | El de la carpeta |
+| `narrador` | Voz que narra: el nombre de una voz de Qwen (`narrador`, `narradora`…) o el nombre completo (`qwen:narrador`, `es_MX-claude-high`) | La elegida en la app |
+| `formato` | `mp3`, `ogg`, `m4b` (audiolibro con capítulos) o `wav` | El elegido en la app |
+| `velocidad` | 1.0 normal, 1.1 algo más rápido | La elegida en la app |
+| `carpeta_audio` | Dónde se guardan los audios, relativo al libro. `"."` los deja junto a cada capítulo | `audio` |
+| `omitir` | Capítulos que no se exportan (con o sin extensión) | Ninguno |
+
+Todas las claves son opcionales: `{"narrador": "narradora"}` ya es un `juglar.json` válido.
+
+## 7. Rehacer un trozo de un audio
+
+Si al escuchar un capítulo exportado una frase salió mal (una palabra mal dicha, un tono raro), **no hace falta volver a exportar el capítulo entero**:
+
+1. En la pestaña **Exportar**, en la fila del audio, pulsa el botón del lápiz (**Rehacer un trozo**).
+2. Sale la lista de fragmentos del audio, con su minuto y su voz. Busca la frase con el buscador y escúchala con ▶.
+3. Pulsa **Rehacer…**. Puedes **corregir el texto** antes (por ejemplo, escribir «Édguard» para que pronuncie bien «Edward»).
+4. Se añade a la cola: se genera solo ese trozo, **con la misma voz y los mismos ajustes** con que se exportó, se revisa con Whisper si está activado y se cambia en el audio. Lo demás no se toca, y los capítulos (`m4b`) se recolocan solos si el trozo dura más o menos.
+
+Para que esto funcione, Juglar guarda junto a cada audio un archivo oculto con el mapa de sus fragmentos (`.Capítulo.mp3.juglar.json`). Si lo borras, el audio sigue funcionando, pero ya no se puede rehacer por trozos. Los audios exportados antes de esta función no lo tienen: vuelve a exportarlos una vez.
+
+Desde la terminal:
+
+```bash
+md2audio audio/Cid_C1_El_bravo.mp3 --fragmentos          # lista: número, minuto, voz y texto
+juglar-cola rehacer audio/Cid_C1_El_bravo.mp3 57          # rehace el fragmento 57
+juglar-cola rehacer audio/Cid_C1_El_bravo.mp3 57 --texto "El texto corregido."
+```
+

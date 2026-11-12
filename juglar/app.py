@@ -26,6 +26,7 @@ APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 import rutas  # noqa: E402
 import cola  # noqa: E402
+import libro  # noqa: E402
 import md2audio  # noqa: E402  (solo para los ajustes de Qwen; no carga ningún motor)
 import pruebas  # noqa: E402
 
@@ -321,11 +322,13 @@ class JobRow:
         actions = Gtk.Box(spacing=2, valign=Gtk.Align.CENTER)
         self.play = self._btn("media-playback-start-symbolic", "Escuchar", lambda *_: win.launch(self.out))
         self.folder = self._btn("folder-open-symbolic", "Abrir carpeta", lambda *_: win.launch(self.out, folder=True))
+        self.redo = self._btn("document-edit-symbolic", "Rehacer un trozo de este audio",
+                              lambda *_: win.open_fragments(self.out))
         self.cancel = self._btn("process-stop-symbolic", "Cancelar",
                                 lambda *_: (cola.cancel_job(job_id), win.refresh_queue()))
         self.remove = self._btn("edit-delete-symbolic", "Quitar de la lista",
                                 lambda *_: (cola.remove_job(job_id), win.refresh_queue()))
-        for w in (self.play, self.folder, self.cancel, self.remove):
+        for w in (self.play, self.redo, self.folder, self.cancel, self.remove):
             actions.append(w)
         win.cols["acciones"].add_widget(actions)
         self.box.append(actions)
@@ -381,6 +384,7 @@ class JobRow:
         self.time.set_label(t)
         self.play.set_visible(st == "done")
         self.folder.set_visible(st == "done")
+        self.redo.set_visible(st == "done" and md2audio.mapa_de(self.out).exists())
         self.cancel.set_visible(st in ("queued", "running"))
         self.remove.set_visible(st != "running")
 
@@ -716,8 +720,8 @@ class JuglarWindow(Adw.ApplicationWindow):
         while (c := self.cast_box.get_first_child()) is not None:
             self.cast_box.remove(c)
         cast, mapa = load_elenco(), md2audio.personajes()
-        nombres, numeros, sin_marca = {}, {}, 0
-        for line in text.splitlines():
+        nombres, numeros, sin_marca, lineas = {}, {}, 0, {}
+        for nlinea, line in enumerate(text.splitlines(), 1):
             m = re.match(r"^\s*[—–]\s*(.*)", line)
             if not m:
                 continue
@@ -725,6 +729,7 @@ class JuglarWindow(Adw.ApplicationWindow):
             if (n := re.match(r"@([\wáéíóúüñÁÉÍÓÚÜÑ.-]+)", resto)):
                 key = md2audio.texto_es.slug(n.group(1))
                 nombres[key] = nombres.get(key, 0) + 1
+                lineas.setdefault(key, []).append(nlinea)
             elif (n := re.match(r"(\d{1,2})\s", resto)) and int(n.group(1)) in mapa:
                 numeros[int(n.group(1))] = numeros.get(int(n.group(1)), 0) + 1
             else:
@@ -739,7 +744,9 @@ class JuglarWindow(Adw.ApplicationWindow):
             elif key in alias:
                 lines.append((f"—@{key}", f"Voz {short_label('qwen:' + alias[key])}", count, False))
             else:
-                lines.append((f"—@{key}", "no existe: créalo en Voces", count, True))
+                donde = ", ".join(map(str, lineas[key][:8])) + ("…" if len(lineas[key]) > 8 else "")
+                lines.append((f"—@{key}", f"no existe (línea{'s' if len(lineas[key]) > 1 else ''} {donde})",
+                              count, True))
         for num, count in sorted(numeros.items()):
             lines.append((f"—{num}", short_label("qwen:" + mapa[num]), count, False))
         if sin_marca:
@@ -765,10 +772,13 @@ class JuglarWindow(Adw.ApplicationWindow):
             return
         ext = FORMATS[self.export_fmt.get_selected()]
         stem = Path(self.doc_name).stem if self.doc_name else "lectura"
-        dialog = Gtk.FileDialog(title="Exportar a audio", initial_name=f"{stem}.{ext}")
-        if self.cfg.get("last_dir") and Path(self.cfg["last_dir"]).is_dir():
-            dialog.set_initial_folder(Gio.File.new_for_path(self.cfg["last_dir"]))
-        dialog.save(self, None, self._export_done, text)
+
+        def elegir():
+            dialog = Gtk.FileDialog(title="Exportar a audio", initial_name=f"{stem}.{ext}")
+            if self.cfg.get("last_dir") and Path(self.cfg["last_dir"]).is_dir():
+                dialog.set_initial_folder(Gio.File.new_for_path(self.cfg["last_dir"]))
+            dialog.save(self, None, self._export_done, text)
+        self.confirmar_marcas([(None, text)], elegir)
 
     def _export_done(self, dialog, res, text):
         try:
@@ -792,6 +802,9 @@ class JuglarWindow(Adw.ApplicationWindow):
                                      lambda *_: (cola.clear_finished(), self.refresh_queue()), "flat")
         right.append(self.clear_btn)
         right.append(self.pause_btn)
+        right.append(tool_button("folder-symbolic", "Exportar carpeta…",
+                                 "Un libro: todos los capítulos (.md o .txt) de una carpeta, en orden",
+                                 self.on_export_folder, "flat"))
         right.append(tool_button("list-add-symbolic", "Añadir archivos", "Añadir .md o .txt a la cola",
                                  self.on_convert, "suggested-action"))
         root.append(head)
@@ -832,7 +845,7 @@ class JuglarWindow(Adw.ApplicationWindow):
                                 halign=Gtk.Align.CENTER)
         self.dropzone.add_css_class("dropzone")
         self.dropzone.append(Gtk.Image(icon_name="document-send-symbolic", pixel_size=48, css_classes=["dim-label"]))
-        self.dropzone.append(label("Suelta aquí archivos .md o .txt", "title"))
+        self.dropzone.append(label("Suelta aquí archivos .md o .txt, o la carpeta de un libro", "title"))
         self.dropzone.append(label("Se convierten en audio uno tras otro, en segundo plano,\n"
                                    "aunque cierres la ventana o el equipo esté en reposo.", "desc",
                                    justify=Gtk.Justification.CENTER))
@@ -840,7 +853,13 @@ class JuglarWindow(Adw.ApplicationWindow):
         pick.add_css_class("suggested-action")
         pick.add_css_class("pill")
         pick.connect("clicked", self.on_convert)
-        self.dropzone.append(pick)
+        picks = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        picks.append(pick)
+        pick_dir = Gtk.Button(label="Exportar carpeta…", halign=Gtk.Align.CENTER, margin_top=6)
+        pick_dir.add_css_class("pill")
+        pick_dir.connect("clicked", self.on_export_folder)
+        picks.append(pick_dir)
+        self.dropzone.append(picks)
 
         self.queue_stack = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.queue_stack.add_named(self.dropzone, "vacio")
@@ -1791,7 +1810,8 @@ class JuglarWindow(Adw.ApplicationWindow):
         else:
             self.play(self.get_text())
 
-    def play(self, text, voice=None, status="Leyendo…", extra=None, speed_mul=1.0, source=None, preview=None):
+    def play(self, text, voice=None, status="Leyendo…", extra=None, speed_mul=1.0, source=None, preview=None,
+             rate=None, clip=None):
         voice = voice or self.current_voice()
         self.preview_spec = preview
         if not text and not source:
@@ -1800,10 +1820,12 @@ class JuglarWindow(Adw.ApplicationWindow):
         if not voice:
             self.toast("No hay ninguna voz instalada")
             return
-        rate = self.rates[voice]
+        rate = rate or self.rates[voice]
         # md2audio -> (esta app) -> aplay, cada uno en su grupo y ligado a la vida de la app
         if source:  # una prueba ya guardada: solo hay que decodificarla
-            cmd = ["ffmpeg", "-loglevel", "error", "-i", str(source), "-f", "s16le", "-ac", "1", "-ar", str(rate), "-"]
+            cmd = ["ffmpeg", "-loglevel", "error",
+                   *(["-ss", f"{clip[0]:.3f}", "-t", f"{clip[1]:.3f}"] if clip else []),  # solo un trozo
+                   "-i", str(source), "-f", "s16le", "-ac", "1", "-ar", str(rate), "-"]
         else:
             cmd = [str(VENV_PY), "-I", str(MD2AUDIO), "-", "--raw", *self.engine_args(voice, speed_mul), *(extra or [])]
         tts = subprocess.Popen(cmd, stdin=subprocess.DEVNULL if source else subprocess.PIPE, stdout=subprocess.PIPE,
@@ -1931,21 +1953,197 @@ class JuglarWindow(Adw.ApplicationWindow):
             return
         voice, speed = self.current_voice(), round(self.speed_adj.get_value(), 3)
         ext = FORMATS[self.format_row.get_selected()]
-        for path in paths:
-            path = Path(path)
-            cola.add_job(path, path.with_suffix("." + ext), voice, speed)
-            self.cfg["last_dir"] = str(path.parent)
-        self.stack.set_visible_child_name("cola")
-        self.toast(f"{len(paths)} archivo(s) en la cola")
-        self.refresh_queue()
+        paths = [Path(p) for p in paths]
+
+        def encolar():
+            for path in paths:
+                cola.add_job(path, path.with_suffix("." + ext), voice, speed)
+                self.cfg["last_dir"] = str(path.parent)
+            self.stack.set_visible_child_name("cola")
+            self.toast(f"{len(paths)} archivo(s) en la cola")
+            self.refresh_queue()
+        self.confirmar_marcas([(p.name, p.read_text(encoding="utf-8", errors="replace")) for p in paths], encolar)
+
+    def confirmar_marcas(self, textos, seguir, voice=None):
+        """Antes de exportar: si hay «—@marca» que no son ni personaje ni voz, avisa con su archivo y línea.
+        textos: [(nombre del archivo o None, texto)]. Llama a seguir() si no hay ninguna o si se exporta igual."""
+        voice = voice or self.current_voice()
+        if not voice.startswith("qwen:") or md2audio.libro_settings().get("flash"):
+            seguir()  # sin voces de personaje no hay nada que comprobar
+            return
+        malas = [(nombre, n, m) for nombre, texto in textos for n, m in md2audio.marcas_desconocidas(texto)]
+        if not malas:
+            seguir()
+            return
+        lista = "\n".join((f"{nombre} · línea {n}" if nombre else f"Línea {n}") + f":  —@{m}"
+                          for nombre, n, m in malas[:200])
+        if len(malas) > 200:
+            lista += f"\n…y {len(malas) - 200} más"
+        dlg = Adw.AlertDialog(heading=f"{len(malas)} marca{'s' if len(malas) > 1 else ''} que no existe"
+                                      f"{'n' if len(malas) > 1 else ''}",
+                              body="Ni son personajes ni voces, así que esas intervenciones las leería el narrador. "
+                                   "Corrígelas o crea el personaje en Voces.")
+        txt = label(lista, "job-sub", xalign=0, selectable=True, wrap=True)
+        dlg.set_extra_child(Gtk.ScrolledWindow(child=txt, max_content_height=280, propagate_natural_height=True,
+                                               hscrollbar_policy=Gtk.PolicyType.NEVER))
+        dlg.add_response("cancel", "Cancelar")
+        dlg.add_response("ok", "Exportar igual")
+        dlg.set_default_response("cancel")
+        dlg.set_close_response("cancel")
+        dlg.connect("response", lambda _d, r: r == "ok" and seguir())
+        dlg.present(self)
+
+    # --- libros por carpetas (ver libro.py y docs/GUIA.md)
+    def on_export_folder(self, _btn):
+        dialog = Gtk.FileDialog(title="Elige la carpeta del libro")
+        if self.cfg.get("last_dir") and Path(self.cfg["last_dir"]).is_dir():
+            dialog.set_initial_folder(Gio.File.new_for_path(self.cfg["last_dir"]))
+        dialog.select_folder(self, None, self._folder_done)
+
+    def _folder_done(self, dialog, res):
+        try:
+            path = dialog.select_folder_finish(res).get_path()
+        except GLib.Error:
+            return
+        self.export_book(path)
+
+    def export_book(self, path):
+        try:
+            lib = libro.Libro(path)
+        except ValueError as e:
+            self.toast(str(e))
+            return
+        voice = lib.narrador or self.current_voice()
+        if voice not in self.rates:
+            self.toast(f"La voz «{voice}» de {libro.CONFIG} no está instalada")
+            return
+        fmt = lib.formato if "formato" in lib.cfg else FORMATS[self.format_row.get_selected()]
+        speed = lib.velocidad if "velocidad" in lib.cfg else round(self.speed_adj.get_value(), 3)
+        hechos = {c for c in lib.capitulos if lib.salida(c, fmt).exists()}
+        faltan = [c for c in lib.capitulos if c not in hechos]
+
+        def encolar(caps):
+            for c in caps:
+                out = lib.salida(c, fmt)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                cola.add_job(c.resolve(), out.resolve(), voice, speed, title=f"{lib.titulo} · {c.stem}",
+                             overwrite=True)
+            self.cfg["last_dir"] = str(lib.carpeta.parent)
+            self.stack.set_visible_child_name("cola")
+            self.toast(f"«{lib.titulo}»: {len(caps)} capítulo(s) en la cola")
+            self.refresh_queue()
+
+        def preguntar():
+            if not hechos:
+                encolar(lib.capitulos)
+                return
+            dlg = Adw.AlertDialog(heading=f"«{lib.titulo}»: {len(lib.capitulos)} capítulos",
+                                  body=f"{len(hechos)} ya tiene{'n' if len(hechos) > 1 else ''} audio en «{lib.carpeta_audio}/». "
+                                       + ("" if faltan else "No falta ninguno."))
+            dlg.add_response("cancel", "Cancelar")
+            dlg.add_response("todos", "Exportar todos de nuevo")
+            if faltan:
+                dlg.add_response("faltan", f"Solo {'el que falta' if len(faltan) == 1 else f'los {len(faltan)} que faltan'}")
+                dlg.set_response_appearance("faltan", Adw.ResponseAppearance.SUGGESTED)
+                dlg.set_default_response("faltan")
+            dlg.set_close_response("cancel")
+            dlg.connect("response", lambda _d, r: r != "cancel" and encolar(lib.capitulos if r == "todos" else faltan))
+            dlg.present(self)
+        self.confirmar_marcas([(c.name, c.read_text(encoding="utf-8", errors="replace")) for c in lib.capitulos],
+                              preguntar, voice)
+
+    # --- rehacer un trozo de un audio ya exportado
+    def frag_voice(self, voz):
+        if not voz:
+            return "Narrador"
+        if voz.startswith("@"):
+            return load_elenco().get(voz[1:], {}).get("nombre", voz)
+        return short_label("qwen:" + voz)
+
+    def open_fragments(self, audio):
+        audio = Path(audio)
+        mapa = md2audio._json(md2audio.mapa_de(audio))
+        frs = mapa.get("fragmentos") or []
+        if not frs:
+            self.toast("Este audio no tiene mapa de fragmentos: vuelve a exportarlo para poder rehacer trozos")
+            return
+        rate, voz = mapa["rate"], mapa["voz"] if mapa["voz"] in self.rates else self.current_voice()
+        dlg = Adw.Dialog(title=f"Rehacer un trozo · {audio.name}", content_width=780, content_height=660)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=6, margin_bottom=12,
+                      margin_start=12, margin_end=12)
+        box.append(label("Busca la frase que salió mal, escúchala y pulsa «Rehacer». Solo se vuelve a generar ese "
+                         "trozo, con la misma voz; el resto del audio no se toca.", "desc", xalign=0, wrap=True))
+        search = Gtk.SearchEntry(placeholder_text="Buscar en el texto")
+        box.append(search)
+        lb = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        lb.add_css_class("boxed-list")
+        for i, f in enumerate(frs, 1):
+            row = Adw.ActionRow(title=f["texto"], use_markup=False, title_lines=4,
+                                subtitle=f"{i} · {md2audio._mmss(f['inicio'] / rate)} · {self.frag_voice(f.get('voz'))}")
+            row.texto = f["texto"].lower()
+            oir = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
+                             tooltip_text="Escuchar este trozo")
+            oir.add_css_class("flat")
+            oir.connect("clicked", lambda _b, f=f: (self.stop(), self.play(
+                "", voice=voz, status="Escuchando el trozo", source=audio, rate=rate,
+                clip=(f["inicio"] / rate, (f["fin"] - f["inicio"]) / rate))))
+            rehacer = Gtk.Button(label="Rehacer…", valign=Gtk.Align.CENTER)
+            rehacer.connect("clicked", lambda _b, i=i, f=f: self.ask_redo(dlg, audio, i, f["texto"]))
+            row.add_suffix(oir)
+            row.add_suffix(rehacer)
+            lb.append(row)
+        q = lambda: search.get_text().strip().lower()  # noqa: E731
+        lb.set_filter_func(lambda r: not q() or q() in r.texto)
+        search.connect("search-changed", lambda *_: lb.invalidate_filter())
+        box.append(Gtk.ScrolledWindow(child=lb, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER))
+        view.set_content(box)
+        dlg.set_child(view)
+        dlg.connect("closed", lambda *_: self.stop())
+        dlg.present(self)
+
+    def ask_redo(self, parent, audio, n, texto):
+        dlg = Adw.AlertDialog(heading=f"Rehacer el trozo {n}",
+                              body="Se genera de nuevo con la misma voz y se cambia solo ese trozo del audio. "
+                                   "Puedes corregir el texto antes (por ejemplo, para que pronuncie mejor una palabra).")
+        tv = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=8, bottom_margin=8, left_margin=8,
+                          right_margin=8)
+        tv.get_buffer().set_text(texto)
+        sw = Gtk.ScrolledWindow(child=tv, min_content_height=110, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        sw.add_css_class("card")
+        dlg.set_extra_child(sw)
+        dlg.add_response("cancel", "Cancelar")
+        dlg.add_response("ok", "Rehacer")
+        dlg.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_close_response("cancel")
+
+        def respuesta(_d, r):
+            if r != "ok":
+                return
+            b = tv.get_buffer()
+            nuevo = b.get_text(b.get_start_iter(), b.get_end_iter(), False).strip()
+            if not nuevo:
+                self.toast("El texto no puede quedar vacío")
+                return
+            cola.add_rehacer(audio, n, nuevo if nuevo != texto else None)
+            parent.close()
+            self.stack.set_visible_child_name("cola")
+            self.toast(f"Rehaciendo el trozo {n} en la cola")
+            self.refresh_queue()
+        dlg.connect("response", respuesta)
+        dlg.present(parent)
 
     def on_drop(self, _target, gfile, _x, _y):
         self.dropzone.remove_css_class("hover")
         path = gfile.get_path()
+        if path and Path(path).is_dir():
+            self.export_book(path)
+            return True
         if path and Path(path).suffix.lower() in TEXT_EXTS:
             self.enqueue([path])
             return True
-        self.toast("Arrastra un archivo .md o .txt")
+        self.toast("Arrastra un archivo .md o .txt, o la carpeta de un libro")
         return False
 
     def on_convert(self, _btn):

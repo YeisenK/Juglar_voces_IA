@@ -5,7 +5,8 @@ Un proceso residente (`cola.py daemon`, lanzado con systemd-run --user) va toman
 de la cola de uno en uno. Es independiente de la ventana: sigue con la pantalla apagada o bloqueada,
 y mientras convierte impide que el equipo se suspenda solo. El estado vive en un JSON con candado.
 
-Uso: juglar-cola add ARCHIVO... | list | pause | resume | cancel ID | remove ID | clear
+Uso: juglar-cola add ARCHIVO... | libro CARPETA | rehacer AUDIO N [--texto T]
+                  | list | pause | resume | cancel ID | remove ID | clear
 """
 import argparse
 import ctypes
@@ -110,6 +111,26 @@ def add_job(src, out, voice=DEFAULT_VOICE, speed=1.0, text=None, title=None, ove
         job = {"id": job_id, "src": str(path), "out": str(out), "voice": voice, "speed": speed,
                "title": title or path.name, "status": "queued", "done": 0, "total": 0, "eta": None,
                "message": None, "duration": None, "chapters": None, "added": time.time()}
+        q["jobs"].append(job)
+        return job
+
+    job = update(_add)
+    ensure_daemon()
+    return job
+
+
+def add_rehacer(audio, n, texto=None):
+    """Encola rehacer el fragmento n de un audio ya exportado (md2audio --rehacer)."""
+    audio = Path(audio)
+    mapa = json.loads(Path(audio.with_name(f".{audio.name}.juglar.json")).read_text())
+
+    def _add(q):
+        job_id = q["next"]
+        q["next"] += 1
+        args = [str(audio), "--rehacer", str(n), *(["--texto", texto] if texto else []), "--json"]
+        job = {"id": job_id, "src": str(audio), "out": str(audio), "voice": mapa["voz"], "speed": mapa["velocidad"],
+               "args": args, "title": f"{audio.name} · rehacer el trozo {n}", "status": "queued", "done": 0,
+               "total": 0, "eta": None, "message": None, "duration": None, "chapters": None, "added": time.time()}
         q["jobs"].append(job)
         return job
 
@@ -224,9 +245,9 @@ def run_job(job, inhibit):
     log = open(LOG, "ab")
     tmp = STATE / "tmp" / str(job["id"])  # temporales propios: se borran aunque md2audio muera a la fuerza
     tmp.mkdir(parents=True, exist_ok=True)
+    args = job.get("args") or [job["src"], "-o", job["out"], "-v", job["voice"], "-s", f"{job['speed']:.3f}", "--json"]
     proc = subprocess.Popen(
-        [str(VENV_PY), "-I", str(MD2AUDIO), job["src"], "-o", job["out"], "-v", job["voice"],
-         "-s", f"{job['speed']:.3f}", "--json"],
+        [str(VENV_PY), "-I", str(MD2AUDIO), *args],
         stdout=subprocess.PIPE, stderr=log, preexec_fn=_die_with_parent, env={**os.environ, "TMPDIR": str(tmp)})
     os.set_blocking(proc.stdout.fileno(), False)
     inhibit.acquire()
@@ -390,6 +411,15 @@ def main():
     a.add_argument("-o", "--output", type=Path, help="archivo de salida (solo con un archivo)")
     a.add_argument("-f", "--format", default="mp3", help="mp3, ogg, m4b o wav (por defecto mp3)")
     a.add_argument("--overwrite", action="store_true", help="sobrescribir el audio si ya existe")
+    lb = sub.add_parser("libro", help="añadir todos los capítulos de una carpeta (ver docs/GUIA.md, «Libros por carpetas»)")
+    lb.add_argument("carpeta", type=Path)
+    lb.add_argument("--todo", action="store_true", help="volver a exportar también los capítulos que ya tienen audio")
+    lb.add_argument("-v", "--voice", help="narrador (si no, el de juglar.json o el por defecto)")
+    lb.add_argument("-f", "--format", help="mp3, ogg, m4b o wav (si no, el de juglar.json o mp3)")
+    rh = sub.add_parser("rehacer", help="volver a generar un trozo de un audio exportado (md2audio AUDIO --fragmentos los lista)")
+    rh.add_argument("audio", type=Path)
+    rh.add_argument("n", type=int, help="número del fragmento")
+    rh.add_argument("--texto", help="texto nuevo para ese fragmento (por defecto, el mismo)")
     ls = sub.add_parser("list", help="ver la cola")
     ls.add_argument("--json", action="store_true")
     for name, h in (("pause", "pausar la cola"), ("resume", "reanudar la cola"), ("clear", "quitar los terminados"),
@@ -408,6 +438,33 @@ def main():
             out = args.output or f.with_suffix("." + args.format.lstrip("."))
             job = add_job(f.resolve(), out.resolve(), args.voice, args.speed, overwrite=args.overwrite)
             print(f"#{job['id']} {f.name} → {Path(job['out']).name}")
+    elif args.cmd == "libro":
+        import libro
+        try:
+            lib = libro.Libro(args.carpeta)
+        except ValueError as e:
+            sys.exit(str(e))
+        for cap, n, marca in (lib.marcas_desconocidas() if (args.voice or lib.narrador or DEFAULT_VOICE).startswith("qwen:") else []):
+            print(f"Aviso: {cap.name}, línea {n}: —@{marca} no es ningún personaje ni voz", file=sys.stderr)
+        voz, fmt = args.voice or lib.narrador or DEFAULT_VOICE, args.format or lib.formato
+        hechos = 0
+        for cap in lib.capitulos:
+            out = lib.salida(cap, fmt)
+            if out.exists() and not args.todo:
+                print(f"ya tiene audio  {cap.name}")
+                continue
+            out.parent.mkdir(parents=True, exist_ok=True)
+            job = add_job(cap.resolve(), out.resolve(), voz, lib.velocidad, title=f"{lib.titulo} · {cap.stem}",
+                          overwrite=True)
+            print(f"#{job['id']} {cap.name} → {out}")
+            hechos += 1
+        print(f"{hechos} capítulo(s) en la cola")
+    elif args.cmd == "rehacer":
+        try:
+            job = add_rehacer(args.audio.resolve(), args.n, args.texto)
+        except (OSError, ValueError):
+            sys.exit("Ese audio no tiene mapa de fragmentos: vuelve a exportarlo con esta versión de Juglar")
+        print(f"#{job['id']} {job['title']}")
     elif args.cmd == "list":
         q = snapshot()
         if args.json:

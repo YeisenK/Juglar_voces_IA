@@ -305,6 +305,17 @@ def marca_voz(perfil, marcas=None):
     return m if marcas.get(m) == perfil else perfil
 
 
+def marcas_desconocidas(texto):
+    """[(línea, marca)] de las intervenciones «—@marca» que no son ni un personaje ni una voz (las leería el narrador)."""
+    conocidas = set(elenco()) | set(marcas_voces())
+    malas = []
+    for n, linea in enumerate(texto.splitlines(), 1):
+        m = re.match(rf"^\s*[—–]\s*@({texto_es._PAL})", linea)
+        if m and texto_es.slug(m.group(1).rstrip(".")) not in conocidas:
+            malas.append((n, m.group(1).rstrip(".")))
+    return malas
+
+
 def ficha_ajustes(ficha, override=None):
     """Ajustes de lectura de un personaje: los de su voz base con sus propios cambios encima."""
     base = qwen_settings(ficha["voz"], override)
@@ -727,6 +738,11 @@ def main():
                     help="con Qwen: modo rápido, sin revisar con Whisper y todo con la voz del narrador")
     ap.add_argument("--sin-flash", action="store_true", help="ignorar el modo flash guardado en los ajustes")
     ap.add_argument("--voz-dialogo", metavar="VOZ", help="con Qwen: voz que lee los diálogos (rayas), p. ej. qwen:narradora")
+    ap.add_argument("--fragmentos", action="store_true",
+                    help="con un audio exportado como entrada: lista sus fragmentos (número, tiempo, voz y texto)")
+    ap.add_argument("--rehacer", type=int, metavar="N",
+                    help="con un audio exportado como entrada: vuelve a generar su fragmento N y lo cambia en el audio")
+    ap.add_argument("--texto", help="con --rehacer: texto nuevo para ese fragmento (por defecto, el mismo)")
     ap.add_argument("--cpu", action="store_true", help="no usar la GPU aunque esté disponible")
     ap.add_argument("--all-kokoro", action="store_true", help="con --list-voices: incluye voces de Kokoro de otros idiomas")
     a = ap.parse_args()
@@ -737,6 +753,11 @@ def main():
         return
     if not a.input:
         ap.error("falta el archivo de entrada")
+    if a.fragmentos or a.rehacer is not None:
+        return rehacer_fragmento(a)
+    if Path(a.input).suffix.lower() in (".mp3", ".ogg", ".opus", ".m4a", ".m4b", ".wav", ".flac"):
+        emit(a.json, type="error", message=f"«{Path(a.input).name}» es un audio, no un texto")
+        sys.exit(1)
 
     if a.input == "-":
         src = Path("stdin.md")
@@ -834,7 +855,11 @@ def main():
                 else:
                     jobs.append((part, 0.0, 0.4, None, None))
     for aviso in dict.fromkeys(texto_es.AVISOS):
-        print(aviso, file=sys.stderr)
+        if not aviso.startswith("Personaje desconocido"):  # esos se avisan abajo, con su línea
+            print(aviso, file=sys.stderr)
+    if qwen and not flash:
+        for n, marca in marcas_desconocidas(raw):
+            print(f"Línea {n}: —@{marca} no es ningún personaje ni voz; lo leerá el narrador", file=sys.stderr)
     total_chars = sum(len(j[0]) for j in jobs)
 
     ncpu = os.cpu_count() or 4
@@ -867,6 +892,7 @@ def main():
     emit(a.json, type="start", total=total_chars, segments=len(jobs), workers=workers, output=str(out))
     silence = lambda sec: b"\x00\x00" * int(rate * sec)  # noqa: E731
     chapters, samples, done, t0 = [], 0, 0, time.time()
+    fragmentos = []  # dónde queda cada fragmento en el audio, para poder rehacerlo luego
     t_first, done_first = None, 0
     revision = {"revisados": 0, "dudosos": 0, "regenerados": 0, "arreglados": 0, "sin_arreglar": 0}
     try:
@@ -895,6 +921,8 @@ def main():
                 if not a.sin_nivelar and libro["nivelar"]:
                     pcm = nivelar(pcm, rate)
                 chunk = silence(pre) + pcm + silence(post)
+                inicio = samples + int(rate * pre)
+                fragmentos.append({"texto": text, "voz": _voz, "inicio": inicio, "fin": inicio + len(pcm) // 2})
                 enc.stdin.write(chunk)
                 samples += len(chunk) // 2
                 done += len(text)
@@ -908,22 +936,13 @@ def main():
         if enc.wait() != 0:
             raise RuntimeError("ffmpeg falló al codificar")
 
-        # Añadir capítulos (encabezados) sin recodificar
-        if chapters and out.suffix.lower() != ".wav":
-            meta = tmpdir / "meta.txt"
-            lines = [";FFMETADATA1", f"title={src.stem}"]
-            bounds = [c[0] for c in chapters[1:]] + [samples]
-            for (start, title), end in zip(chapters, bounds):
-                t = re.sub(r"([=;#\\\n])", r"\\\1", title.rstrip("."))
-                lines += ["[CHAPTER]", f"TIMEBASE=1/{rate}", f"START={start}", f"END={end}", f"title={t}"]
-            meta.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            final = tmpdir / ("final" + out.suffix)
-            r = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(tmp_audio),
-                                "-i", str(meta), "-map", "0", "-map_metadata", "1", "-map_chapters", "1",
-                                "-c", "copy", str(final)])
-            if r.returncode == 0:
-                tmp_audio = final
+        tmp_audio = poner_capitulos(tmp_audio, chapters, samples, rate, src.stem, tmpdir)
         shutil.move(str(tmp_audio), out)
+        guardar_mapa(out, {
+            "version": 1, "fuente": None if a.input == "-" else str(src.resolve()), "titulo": src.stem,
+            "voz": a.voice, "velocidad": a.speed, "qwen_ajustes": a.qwen_ajustes, "voz_dialogo": a.voz_dialogo,
+            "flash": bool(flash), "nivelar": not a.sin_nivelar and libro["nivelar"], "rate": rate,
+            "muestras": samples, "capitulos": chapters, "fragmentos": fragmentos})
         emit(a.json, type="done", output=str(out), duration=samples / rate, chapters=len(chapters),
              revision=revision if revision["revisados"] else None)
     except (KeyboardInterrupt, BrokenPipeError):
@@ -933,6 +952,121 @@ def main():
     except Exception as e:  # noqa: BLE001
         enc.kill()
         emit(a.json, type="error", message=str(e))
+        sys.exit(1)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def poner_capitulos(audio, chapters, samples, rate, titulo, tmpdir):
+    """Añade los capítulos (encabezados) al audio sin recodificar; devuelve el archivo resultante."""
+    if not chapters or audio.suffix.lower() == ".wav":
+        return audio
+    meta = tmpdir / "meta.txt"
+    lines = [";FFMETADATA1", f"title={titulo}"]
+    bounds = [c[0] for c in chapters[1:]] + [samples]
+    for (start, title), end in zip(chapters, bounds):
+        t = re.sub(r"([=;#\\\n])", r"\\\1", title.rstrip("."))
+        lines += ["[CHAPTER]", f"TIMEBASE=1/{rate}", f"START={start}", f"END={end}", f"title={t}"]
+    meta.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    final = tmpdir / ("final" + audio.suffix)
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(audio),
+                        "-i", str(meta), "-map", "0", "-map_metadata", "1", "-map_chapters", "1",
+                        "-c", "copy", str(final)])
+    return final if r.returncode == 0 else audio
+
+
+def mapa_de(audio):
+    """Mapa de fragmentos de un audio exportado: «.NOMBRE.mp3.juglar.json», oculto junto al audio."""
+    audio = Path(audio)
+    return audio.with_name(f".{audio.name}.juglar.json")
+
+
+def guardar_mapa(audio, mapa):
+    with contextlib.suppress(OSError):
+        mapa_de(audio).write_text(json.dumps(mapa, ensure_ascii=False), encoding="utf-8")
+
+
+def _mmss(seg):
+    seg = int(seg)
+    return f"{seg // 3600}:{seg % 3600 // 60:02d}:{seg % 60:02d}" if seg >= 3600 else f"{seg // 60}:{seg % 60:02d}"
+
+
+def rehacer_fragmento(a):
+    """--fragmentos: lista los fragmentos de un audio. --rehacer N: vuelve a generar el fragmento N y lo cambia
+    en el audio (el resto no se toca), con la misma voz y los mismos ajustes con que se exportó."""
+    import types
+
+    audio = Path(a.input)
+    mapa = _json(mapa_de(audio))
+    if not audio.exists() or not mapa.get("fragmentos"):
+        emit(a.json, type="error", message="Este audio no tiene mapa de fragmentos; vuelve a exportarlo con esta "
+                                           "versión de Juglar para poder rehacer trozos")
+        sys.exit(1)
+    frs, rate = mapa["fragmentos"], mapa["rate"]
+    if a.fragmentos:
+        if a.json:
+            print(json.dumps(mapa, ensure_ascii=False))
+        else:
+            for i, f in enumerate(frs, 1):
+                print(f"{i}\t{_mmss(f['inicio'] / rate)}\t{f.get('voz') or 'narrador'}\t{f['texto']}")
+        return
+    n = a.rehacer
+    if not 1 <= n <= len(frs):
+        emit(a.json, type="error", message=f"No hay fragmento {n} (el audio tiene {len(frs)})")
+        sys.exit(1)
+    fr = frs[n - 1]
+    texto = (a.texto or "").strip() or fr["texto"]
+    voice, speed = mapa["voz"], mapa["velocidad"]
+    emit(a.json, type="start", total=len(texto), segments=1, workers=1, output=str(audio))
+    t0 = time.time()
+    tmpdir = Path(tempfile.mkdtemp(prefix="md2audio-"))
+    revision = {"revisados": 0, "dudosos": 0, "regenerados": 0, "arreglados": 0, "sin_arreglar": 0}
+    try:
+        if voice.startswith("qwen:"):
+            perfil = voice.split(":", 1)[1]
+            override = qwen_override(types.SimpleNamespace(qwen_ajustes=mapa.get("qwen_ajustes"),
+                                                           voz_dialogo=mapa.get("voz_dialogo")))
+            cfg = qwen_settings(perfil, override)
+            engine = QwenEngine(perfil, speed, cfg, override)
+            try:
+                if cfg["revisar"] and not mapa.get("flash") and WHISPER_PY.exists() and WHISPER_WORKER.exists():
+                    rev = Revisor(QWEN_RATE)
+                    try:
+                        pcm = next(qwen_revisados(engine, rev, [texto], [fr.get("voz")], cfg, revision))
+                    finally:
+                        rev.close()
+                else:
+                    pcm = engine.synth([texto], voices=[fr.get("voz")])[0]
+            finally:
+                engine.close()
+        else:
+            _load_voice(voice, speed, os.cpu_count() or 4)
+            pcm = _synth(texto)
+        if mapa.get("nivelar"):
+            pcm = nivelar(pcm, rate)
+        emit(a.json, type="progress", done=len(texto), total=len(texto), elapsed=time.time() - t0, eta=None)
+        raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(audio), "-f", "s16le", "-ac", "1",
+                              "-ar", str(rate), "-"], capture_output=True, check=True).stdout
+        ini, fin = fr["inicio"], fr["fin"]
+        nuevo = raw[:ini * 2] + pcm + raw[fin * 2:]
+        delta = len(pcm) // 2 - (fin - ini)
+        fr.update(texto=texto, fin=ini + len(pcm) // 2)
+        for f in frs[n:]:
+            f["inicio"] += delta
+            f["fin"] += delta
+        mapa["capitulos"] = [[c + (delta if c > ini else 0), t] for c, t in mapa.get("capitulos", [])]
+        mapa["muestras"] = len(nuevo) // 2
+        tmp_audio = tmpdir / ("audio" + audio.suffix)
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "s16le", "-ar", str(rate),
+                        "-ac", "1", "-i", "-", *fmt_codec(audio), str(tmp_audio)], input=nuevo, check=True)
+        tmp_audio = poner_capitulos(tmp_audio, mapa["capitulos"], mapa["muestras"], rate,
+                                    mapa.get("titulo", audio.stem), tmpdir)
+        shutil.move(str(tmp_audio), audio)
+        guardar_mapa(audio, mapa)
+        emit(a.json, type="done", output=str(audio), duration=mapa["muestras"] / rate,
+             chapters=len(mapa["capitulos"]), revision=revision if revision["revisados"] else None)
+    except Exception as e:  # noqa: BLE001
+        emit(a.json, type="error", message=str(e)[-300:])
         sys.exit(1)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

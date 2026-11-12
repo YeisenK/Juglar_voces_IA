@@ -53,7 +53,7 @@ Sin tarjeta NVIDIA, instala solo las voces rápidas:
 SIN_QWEN=1 ./install.sh
 ```
 
-Se puede volver a ejecutar cuando quieras (por ejemplo, tras un `git pull`): lo que ya está instalado se deja como está.
+Se puede volver a ejecutar cuando quieras (por ejemplo, tras un `git pull`): lo que ya está instalado se deja como está, salvo las **voces que cambiaron en el repositorio**, que se actualizan (guardando una copia de las tuyas y tus ajustes). Si cambiaste alguna voz a mano, pregunta antes; `ACTUALIZAR_VOCES=1 ./install.sh` las actualiza sin preguntar y `ACTUALIZAR_VOCES=0` las deja todas.
 
 ## Uso
 
@@ -62,7 +62,7 @@ Abre **Juglar** desde el menú de aplicaciones o escribe `juglar`. La app tiene 
 | Pestaña | Para qué |
 |---|---|
 | **Leer** | Escribir, pegar o abrir un texto y escucharlo. A la derecha, *Propiedades*: duración estimada, quién habla en el texto y **Exportar a audio…** |
-| **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. Elige narrador, formato y velocidad. |
+| **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. **Exportar carpeta…** convierte un libro entero (una carpeta, un capítulo por archivo). En cada audio terminado, **Rehacer un trozo** vuelve a generar solo la frase que salió mal. |
 | **Voces** | Escuchar cada voz o personaje (*Probar*), ajustar su temperatura, crear personajes con nombre y voces nuevas. |
 | **Audiolibro** | Modo flash, pausas, voz de los diálogos, revisión con Whisper, volumen y diccionario de pronunciación. |
 
@@ -97,6 +97,8 @@ A la mañana siguiente, el camino estaba cubierto de nieve.
 | `leer "texto"` / `leer capitulo.md` | Lee en voz alta sin abrir la ventana. `leer -v qwen:narrador -s 1.1 …` |
 | `md2audio capitulo.md -o capitulo.mp3 -v qwen:narradora` | Convierte a audio. `--text-only` muestra el texto tal como se va a leer. `--list-voices` lista las voces. `--help` muestra todo lo demás. |
 | `juglar-cola add *.md` · `list` · `pause` · `resume` | Maneja la cola de exportación. |
+| `juglar-cola libro CARPETA` | Exporta un libro entero: cada `.md`/`.txt` de la carpeta es un capítulo; los audios van a `CARPETA/audio/`. Ver [libros por carpetas](docs/GUIA.md#6-libros-por-carpetas). |
+| `md2audio AUDIO --fragmentos` · `juglar-cola rehacer AUDIO N` | Lista los trozos de un audio exportado y vuelve a generar el trozo N. Ver [rehacer un trozo](docs/GUIA.md#7-rehacer-un-trozo-de-un-audio). |
 | `juglar-pruebas` | Genera de una vez las pruebas de voz que falten. |
 
 ## Dónde se guarda cada cosa
