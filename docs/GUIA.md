@@ -390,7 +390,9 @@ Hay dos maneras: rellenar el formulario de la pestaña, o escribir la canción e
 1. **Título**: el nombre del archivo que se crea.
 2. **Cómo suena · estilo**: la música descrita en lenguaje natural. El botón **Ejemplos** rellena algunas para empezar. Debajo, en **Voz, instrumentos, ambiente, tempo y tonalidad**, cada detalle tiene su campo (los mismos que las claves del `.md`).
 3. **Letra**: escríbela o pégala. Sin letra, sale instrumental.
-4. Abajo: **duración** en segundos (0 = que la elija el modelo; hasta 8 minutos), **idioma** de la voz y **semilla** (−1 = al azar).
+4. Abajo: **duración** en segundos (0 = que la elija el modelo; hasta 8 minutos), **idioma** de la voz, **semilla** (−1 = al azar) y **calidad**:
+   - **Alta** (por defecto): el modelo de calidad de ACE-Step (*sft*, 50 pasos) con el compositor grande (1.7B). Hace **3 tomas** y Whisper escucha cuál canta mejor la letra, sin saltarse versos; esa es la que se guarda. Tarda bastante más.
+   - **Rápida**: el modelo *turbo* con el compositor pequeño, una sola toma. Sirve para probar ideas.
 5. **Generar canción**: va a la misma cola que los audios (así nunca coincide con Qwen en la tarjeta) y aparece a la derecha cuando está. Se guarda en `~/Música/Juglar`.
 
 Botones de arriba:
@@ -404,9 +406,11 @@ Botones de arriba:
 
 Mientras se genera, la canción aparece arriba en la lista con su progreso y dos botones: **⏸ Pausar** (se congela donde va y la cola entera espera; ▶ la reanuda) y **⏹ Detener** (la cancela y la quita; las que están en cola también se pueden quitar así). Lo mismo se puede hacer desde la pestaña **Exportar**.
 
+Debajo de cada canción terminada sale **«letra cantada N %»**: la parte de la letra que Whisper oyó cantada y en orden. No es exacto (a Whisper le cuesta entender canto con música), pero sirve para comparar: si una versión da mucho menos que otra, se ha saltado versos.
+
 En la lista de canciones de la derecha: ▶ escuchar, ↻ **cargar su letra, estilo y semilla** (si generas sin cambiar nada, sale la misma; cambia el estilo o pon la semilla al azar para variaciones), abrir la carpeta y mandar a la papelera. Cada canción guarda sus datos en un archivo oculto a su lado (`.Canción.mp3.musica.json`).
 
-La primera canción tarda más porque descarga el modelo (unos 10 GB). Después, una canción de 30-40 segundos tarda unos 20-25 segundos en una tarjeta de 8 GB.
+La primera canción tarda más porque descarga los modelos (unos 15 GB). En una tarjeta de 8 GB, una canción de 3 minutos y medio tarda **alrededor de 1 minuto en calidad rápida** y **unos 8-10 minutos en calidad alta** (3 tomas de unos 2,5 minutos cada una, más la escucha de Whisper).
 
 ### 8.2 Reglas del `.md` de canción
 
@@ -459,6 +463,7 @@ Claves de la cabecera (da igual mayúsculas o tildes):
 | `Idioma:` | Idioma en que se canta. Por defecto, español. | `español` · `inglés` · `latín` · `es` |
 | `Semilla:` | Número para repetir exactamente una canción. | `azar` · `1234` |
 | `Instrumental:` | Sin voz, aunque haya letra. | `sí` |
+| `Calidad:` | `alta` (3 tomas con el modelo bueno; se queda la que mejor canta la letra) o `rápida` (una toma, para probar). Por defecto, alta. | `alta` · `rápida` |
 | `Título:` | Otra forma de poner el título. | `El juglar` |
 
 Etiquetas de la letra:
@@ -510,4 +515,4 @@ juglar-cola musica "El juglar.md" -d "rock épico con guitarras eléctricas"   #
 juglar-cola musica -d "música medieval de taberna, laúd y flauta" -t 60 -o ~/Música/Juglar/Taberna.mp3   # instrumental
 ```
 
-`-d` sustituye al estilo (voz, instrumentos y lo demás del `.md` se quedan); `-t` (segundos), `--semilla` e `--idioma` mandan sobre lo que diga el `.md`.
+`-d` sustituye al estilo (voz, instrumentos y lo demás del `.md` se quedan); `-t` (segundos), `--semilla`, `--idioma` y `--calidad alta|rapida` mandan sobre lo que diga el `.md`.

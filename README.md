@@ -35,7 +35,7 @@ Los juglares iban de pueblo en pueblo contando historias y dando voz a cada pers
 - **Python 3** del sistema con PyGObject, `ffmpeg`, `aplay` (alsa-utils) y `curl`.
 - Para las voces de **Qwen3-TTS**, que son las de mejor calidad: una tarjeta **NVIDIA con unos 8 GB** de memoria (probado con una RTX 4060 Laptop) y unos **15 GB** de disco para modelos y entornos.
 - Sin GPU funcionan las voces de Piper y Kokoro (ver `SIN_QWEN` abajo).
-- Para la **música** (opcional), unos **18 GB** más de disco; usa la misma tarjeta.
+- Para la **música** (opcional), unos **23 GB** más de disco; usa la misma tarjeta (cabe en 8 GB).
 
 ## Instalación
 

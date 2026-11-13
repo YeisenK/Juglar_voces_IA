@@ -83,7 +83,21 @@ CLAVES = {
     "ambiente": "ambiente", "atmosfera": "ambiente", "tempo": "tempo", "ritmo": "tempo", "bpm": "tempo",
     "compas": "tempo", "tonalidad": "tonalidad", "tono": "tonalidad", "duracion": "duracion",
     "idioma": "idioma", "semilla": "semilla", "instrumental": "instrumental", "titulo": "titulo",
+    "calidad": "calidad",
 }
+# Calidades del generador (motores/musica_worker.py): (clave, nombre en la app)
+CALIDADES = [("alta", "Alta · 3 tomas, elige la que mejor canta la letra (lenta)"),
+             ("rapida", "Rápida · una toma (para probar)")]
+CALIDAD_POR_DEFECTO = "alta"
+
+
+def _calidad(v):
+    v = _sin_tildes(v)
+    if v in ("rapida", "turbo", "baja", "prueba", "borrador"):
+        return "rapida"
+    if v in ("alta", "buena", "maxima", "final", "sft"):
+        return "alta"
+    raise ValueError(f"Calidad desconocida: «{v}» (usa «alta» o «rápida»)")
 NOMBRES = {"estilo": "Estilo", "voz": "Voz", "instrumentos": "Instrumentos", "ambiente": "Ambiente",
            "tempo": "Tempo", "tonalidad": "Tonalidad"}
 SI = ("si", "sí", "s", "yes", "true", "1")
@@ -161,7 +175,7 @@ def _letra_md(texto):
 
 def nueva_cancion(titulo="Canción"):
     return {"titulo": titulo, **{k: "" for k in CAMPOS}, "letra": "", "duracion": None, "idioma": None,
-            "semilla": None, "instrumental": False}
+            "semilla": None, "instrumental": False, "calidad": None}
 
 
 def completar(c):
@@ -239,6 +253,8 @@ def leer_cancion(path):
             c["semilla"] = -1 if _sin_tildes(valor) in ("azar", "al azar", "aleatoria", "-1", "") else int(valor)
         elif clave == "instrumental":
             c["instrumental"] = _sin_tildes(valor) in SI
+        elif clave == "calidad":
+            c["calidad"] = _calidad(valor)
         elif clave == "titulo":
             c["titulo"] = valor
         i += 1
@@ -266,6 +282,8 @@ def escribir_cancion(c):
     cab.append(f"Idioma: {nombre.lower()}")
     s = c.get("semilla")
     cab.append(f"Semilla: {s}" if s is not None and int(s) >= 0 else "Semilla: azar")
+    if c.get("calidad"):
+        cab.append(f"Calidad: {'rápida' if c['calidad'] == 'rapida' else 'alta'}")
     letra = (c.get("letra") or "").strip() or "[Instrumental]"
     return "\n".join(cab) + "\n\n" + letra + "\n"
 

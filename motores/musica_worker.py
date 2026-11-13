@@ -63,20 +63,56 @@ def duracion_de(path):
         return None
 
 
+# Calidades: modelo de música (DiT), pasos, compositor (LM) y tomas (se queda la que mejor canta la letra)
+CALIDADES = {
+    "rapida": {"modelo": "acestep-v15-turbo", "pasos": 8, "lm": "acestep-5Hz-lm-0.6B", "tomas": 1},
+    "alta": {"modelo": "acestep-v15-sft", "pasos": 50, "lm": "acestep-5Hz-lm-1.7B", "tomas": 3},
+}
+WHISPER_PY = ACESTEP.parent / "whisper/bin/python"
+LETRA_CANTADA = Path(__file__).resolve().parent / "letra_cantada.py"
+
+
+def medir_letra(letra, audios, idioma):
+    """Con Whisper: qué parte de la letra se canta en cada audio → {audio: cobertura (0-1) o None}."""
+    if not WHISPER_PY.exists() or not LETRA_CANTADA.exists():
+        return {}
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write(letra)
+    try:
+        r = subprocess.run([str(WHISPER_PY), str(LETRA_CANTADA), f.name, *map(str, audios)], capture_output=True,
+                           text=True, env={**os.environ, "IDIOMA": idioma}, timeout=1800)
+        out = {}
+        for linea in r.stdout.splitlines():
+            try:
+                d = json.loads(linea)
+                out[d["audio"]] = d.get("cobertura")
+            except ValueError:
+                pass
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+    finally:
+        os.unlink(f.name)
+
+
 def main():
     pet = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     salida = Path(pet["salida"])
     ext = salida.suffix.lstrip(".").lower() or "mp3"
     formato = FORMATOS.get(ext, "flac")
+    cal = {**CALIDADES.get(pet.get("calidad") or "rapida", CALIDADES["rapida"]),
+           **{k: pet[k] for k in ("modelo", "pasos", "lm", "tomas") if pet.get(k)}}
+    turbo = "turbo" in cal["modelo"]
 
     fase(1, "Preparando ACE-Step…")
+    import gc
     import torch
     from acestep.gpu_config import get_gpu_config, set_global_gpu_config
     from acestep.handler import AceStepHandler
     from acestep.inference import GenerationConfig, GenerationParams, generate_music
     from acestep.llm_inference import LLMHandler
-    from acestep.model_downloader import (check_main_model_exists, ensure_lm_model, ensure_main_model,
-                                          get_checkpoints_dir)
+    from acestep.model_downloader import (check_main_model_exists, check_model_exists, ensure_dit_model,
+                                          ensure_lm_model, ensure_main_model, get_checkpoints_dir)
 
     gpu = get_gpu_config()
     set_global_gpu_config(gpu)
@@ -89,29 +125,35 @@ def main():
         ok, msg = ensure_main_model(ckpt)
         if not ok:
             raise RuntimeError(f"No se pudo descargar el modelo: {msg}")
+    if not check_model_exists(cal["modelo"], ckpt):
+        fase(3, f"Descargando {cal['modelo']} (solo la primera vez)…")
+        ok, msg = ensure_dit_model(cal["modelo"], ckpt)
+        if not ok:
+            raise RuntimeError(f"No se pudo descargar {cal['modelo']}: {msg}")
 
     fase(5, "Cargando el modelo de música…")
     dit = AceStepHandler()
-    msg, ok = dit.initialize_service(project_root=str(ACESTEP), config_path="acestep-v15-turbo", device=device,
+    msg, ok = dit.initialize_service(project_root=str(ACESTEP), config_path=cal["modelo"], device=device,
                                      offload_to_cpu=offload, offload_dit_to_cpu=gpu.offload_dit_to_cpu_default,
                                      quantization="int8_weight_only" if gpu.quantization_default else None)
     if not ok:
         raise RuntimeError(f"No se pudo cargar ACE-Step: {msg}")
 
-    # El modelo de lenguaje (LM) planifica la canción: estructura, tempo, tonalidad y la descripción
-    llm, thinking = LLMHandler(), bool(gpu.init_lm_default)
+    # El compositor (LM) planifica la canción: estructura, melodía, dónde va cada verso, tempo y tonalidad
+    llm, thinking, lm = LLMHandler(), bool(gpu.init_lm_default) or cal["lm"] != "acestep-5Hz-lm-0.6B", cal["lm"]
     if thinking:
-        fase(10, "Cargando el compositor (LM)…")
-        modelos = llm.get_available_5hz_lm_models()
-        lm = gpu.recommended_lm_model or (modelos[0] if modelos else None) or "acestep-5Hz-lm-0.6B"
-        if lm not in modelos:
+        fase(10, "Cargando el compositor…")
+        if not check_model_exists(lm, ckpt):
             ok, msg = ensure_lm_model(lm, checkpoints_dir=ckpt)
             if not ok:
-                thinking = False
-        if thinking:
+                lm = "acestep-5Hz-lm-0.6B"
+        msg, ok = llm.initialize(checkpoint_dir=str(ckpt), lm_model_path=lm, backend="pt", device=device,
+                                 offload_to_cpu=offload)
+        if not ok and lm != "acestep-5Hz-lm-0.6B":  # no cupo: el pequeño
+            lm = "acestep-5Hz-lm-0.6B"
             msg, ok = llm.initialize(checkpoint_dir=str(ckpt), lm_model_path=lm, backend="pt", device=device,
                                      offload_to_cpu=offload)
-            thinking = ok
+        thinking = ok
 
     letra = (pet.get("letra") or "").strip()
     instrumental = bool(pet.get("instrumental")) or not letra or letra.lower() == "[instrumental]"
@@ -119,52 +161,75 @@ def main():
     tope = gpu.max_duration_with_lm if thinking else gpu.max_duration_without_lm
     if dur > 0:
         dur = max(10.0, min(dur, float(tope or 600)))
-    params = GenerationParams(
-        task_type="text2music", caption=(pet.get("descripcion") or "")[:4000],  # el compositor (LM) la resume
-        lyrics="[Instrumental]" if instrumental else letra[:4096], instrumental=instrumental,
-        vocal_language=pet.get("idioma") or "es", duration=dur if dur > 0 else -1.0,
-        bpm=pet.get("bpm") or None, keyscale=pet.get("clave") or pet.get("tonalidad") or "",
-        timesignature=str(pet.get("compas") or ""),
-        inference_steps=8, shift=3.0, seed=int(pet.get("semilla", -1)), thinking=thinking,
-        use_cot_language=False)
-    config = GenerationConfig(batch_size=1, audio_format=formato, use_random_seed=int(pet.get("semilla", -1)) < 0,
-                              seeds=None if int(pet.get("semilla", -1)) < 0 else [int(pet["semilla"])],
-                              mp3_bitrate="192k")
+    semilla = int(pet.get("semilla", -1))
+    tomas = max(1, int(cal["tomas"]))
 
     traducir = (("Generating music", "Generando la música…"), ("Decoding", "Pasando a audio…"),
                 ("Preparing audio", "Guardando…"), ("Preparing", "Preparando…"), ("LM", "Componiendo…"))
-
-    def progreso(valor, desc=None, **_):
-        texto = next((es for en, es in traducir if desc and en.lower() in desc.lower()), "Generando…")
-        try:
-            fase(15 + 84 * float(valor), texto)
-        except (TypeError, ValueError):
-            pass
-
-    fase(15, "Componiendo…" if thinking else "Generando…")
     t0 = time.time()
+    hechas = []   # (ruta, semilla, metadatos del compositor)
     with tempfile.TemporaryDirectory(prefix="juglar-musica-") as tmp:
-        res = generate_music(dit, llm, params, config, save_dir=tmp, progress=progreso)
-        if not res.success or not res.audios:
-            raise RuntimeError(res.error or res.status_message or "ACE-Step no devolvió audio")
-        audio = res.audios[0]
-        origen = Path(audio["path"])
-        salida.parent.mkdir(parents=True, exist_ok=True)
-        if origen.suffix.lstrip(".") == ext or formato == ext:
-            shutil.move(str(origen), salida)
-        else:
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(origen), str(salida)], check=True)
+        for k in range(tomas):
+            base, ancho = 15 + 70 * k / tomas, 70 / tomas
+            sufijo = f" (toma {k + 1} de {tomas})" if tomas > 1 else ""
 
-    usados = audio.get("params") or {}
-    semilla = usados.get("seed", pet.get("semilla"))
-    meta = {**pet, "semilla_usada": semilla, "segundos_generando": round(time.time() - t0, 1),
-            "modelo": "ACE-Step 1.5 turbo", "compositor": thinking, "fecha": time.time(),
-            "decidido": {k: v for k, v in (res.extra_outputs.get("lm_metadata") or {}).items()
-                         if isinstance(v, (str, int, float, bool, type(None)))}
-            if isinstance(res.extra_outputs, dict) else {}}
+            def progreso(valor, desc=None, **_):
+                texto = next((es for en, es in traducir if desc and en.lower() in desc.lower()), "Generando…")
+                try:
+                    fase(base + ancho * float(valor), texto.rstrip("…") + sufijo + "…")
+                except (TypeError, ValueError):
+                    pass
+
+            s_k = semilla + k if semilla >= 0 else -1
+            params = GenerationParams(
+                task_type="text2music", caption=(pet.get("descripcion") or "")[:4000],  # el compositor la resume
+                lyrics="[Instrumental]" if instrumental else letra[:4096], instrumental=instrumental,
+                vocal_language=pet.get("idioma") or "es", duration=dur if dur > 0 else -1.0,
+                bpm=pet.get("bpm") or None, keyscale=pet.get("clave") or pet.get("tonalidad") or "",
+                timesignature=str(pet.get("compas") or ""), inference_steps=int(cal["pasos"]),
+                shift=3.0 if turbo else 1.0, guidance_scale=1.0 if turbo else float(pet.get("guia") or 7.0),
+                seed=s_k, thinking=thinking, use_cot_language=False)
+            config = GenerationConfig(batch_size=1, audio_format=formato, use_random_seed=s_k < 0,
+                                      seeds=None if s_k < 0 else [s_k], mp3_bitrate="192k")
+            fase(base, ("Componiendo" if thinking else "Generando") + sufijo + "…")
+            res = generate_music(dit, llm, params, config, save_dir=tmp, progress=progreso)
+            if not res.success or not res.audios:
+                raise RuntimeError(res.error or res.status_message or "ACE-Step no devolvió audio")
+            audio = res.audios[0]
+            ruta = Path(tmp) / f"toma{k + 1}{Path(audio['path']).suffix}"
+            shutil.move(audio["path"], ruta)
+            meta_lm = res.extra_outputs.get("lm_metadata") if isinstance(res.extra_outputs, dict) else None
+            hechas.append((ruta, (audio.get("params") or {}).get("seed", s_k),
+                           {kk: v for kk, v in (meta_lm or {}).items()
+                            if isinstance(v, (str, int, float, bool, type(None)))}))
+        segundos = round(time.time() - t0, 1)
+
+        # elegir la toma que mejor canta la letra (Whisper); con una sola, se mide igualmente para informar
+        coberturas = {}
+        if not instrumental:
+            fase(86, "Escuchando qué toma canta mejor la letra…" if tomas > 1 else "Comprobando la letra cantada…")
+            del dit, llm
+            gc.collect()
+            if device == "cuda":
+                torch.cuda.empty_cache()
+            coberturas = medir_letra(letra, [h[0] for h in hechas], pet.get("idioma") or "es")
+        elegida = max(range(len(hechas)), key=lambda n: (coberturas.get(str(hechas[n][0])) or 0, -n))
+        ruta, semilla_usada, decidido = hechas[elegida]
+        salida.parent.mkdir(parents=True, exist_ok=True)
+        if ruta.suffix.lstrip(".") == ext or formato == ext:
+            shutil.move(str(ruta), salida)
+        else:
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(ruta), str(salida)], check=True)
+
+    cob = coberturas.get(str(hechas[elegida][0]))
+    meta = {**pet, "semilla_usada": semilla_usada, "segundos_generando": segundos,
+            "modelo": f"ACE-Step 1.5 · {cal['modelo'].replace('acestep-v15-', '')} · {cal['pasos']} pasos",
+            "compositor": lm if thinking else None, "fecha": time.time(), "decidido": decidido,
+            "letra_cantada": cob,
+            "tomas": [{"semilla": h[1], "letra_cantada": coberturas.get(str(h[0]))} for h in hechas]}
     salida.with_name(f".{salida.name}.musica.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1),
                                                                  encoding="utf-8")
-    emit(type="done", duration=duracion_de(salida), seed=semilla)
+    emit(type="done", duration=duracion_de(salida), seed=semilla_usada, letra_cantada=cob)
 
 
 if __name__ == "__main__":

@@ -146,7 +146,7 @@ def extras_de(c):
     """bpm, tonalidad, compás y los campos de «cómo suena» de una canción (musica.leer_cancion), para add_musica."""
     import musica
     return {"bpm": c.get("bpm"), "clave": c.get("clave", ""), "compas": c.get("compas", ""),
-            "campos": {k: c.get(k, "") for k in musica.CAMPOS}}
+            "campos": {k: c.get(k, "") for k in musica.CAMPOS}, "calidad": c.get("calidad")}
 
 
 def add_cancion_md(path, salida=None):
@@ -183,7 +183,7 @@ def add_actualizar(audio, nuevo):
 
 
 def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es", instrumental=False,
-               titulo=None, overwrite=False, bpm=None, clave="", compas="", campos=None):
+               titulo=None, overwrite=False, bpm=None, clave="", compas="", campos=None, calidad=None):
     """Encola generar una canción con ACE-Step (motores/musica_worker.py). Devuelve el trabajo."""
     if not rutas.ACESTEP_PY.exists():
         raise RuntimeError("ACE-Step no está instalado (vuelve a ejecutar install.sh y acepta la música)")
@@ -204,7 +204,7 @@ def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es
         pet.write_text(json.dumps({"salida": str(out), "titulo": titulo or out.stem, "descripcion": descripcion,
                                    "letra": letra, "duracion": duracion, "semilla": semilla, "idioma": idioma,
                                    "instrumental": instrumental, "bpm": bpm, "clave": clave, "compas": compas,
-                                   "campos": campos or {}},
+                                   "campos": campos or {}, "calidad": calidad or musica.CALIDAD_POR_DEFECTO},
                                   ensure_ascii=False), encoding="utf-8")
         job = {"id": job_id, "tipo": "musica", "src": str(pet), "out": str(out), "voice": "musica", "speed": 1.0,
                "cmd": [str(rutas.ACESTEP_PY), str(MUSICA_WORKER), str(pet)],
@@ -565,6 +565,8 @@ def main():
     mu.add_argument("-t", "--duracion", type=float, help="segundos (10-600); 0 = la que elija el modelo")
     mu.add_argument("--semilla", type=int)
     mu.add_argument("--idioma")
+    mu.add_argument("--calidad", choices=("alta", "rapida"), help="alta (3 tomas, elige la que mejor canta la letra) "
+                                                              "o rapida (una toma); por defecto, la del .md o alta")
     mu.add_argument("-o", "--output", type=Path, help="archivo de salida (por defecto en ~/Música/Juglar)")
     ls = sub.add_parser("list", help="ver la cola")
     ls.add_argument("--json", action="store_true")
@@ -628,6 +630,8 @@ def main():
             except (OSError, ValueError) as e:
                 print(f"{f}: {e}", file=sys.stderr)
                 continue
+            if args.calidad:
+                c["calidad"] = args.calidad
             if args.descripcion:  # -d sustituye al estilo (los demás campos del .md se quedan)
                 c = musica.completar({**c, "estilo": args.descripcion})
             desc = c["descripcion"]

@@ -998,6 +998,12 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.music_seed.set_value(-1)
         self.music_seed.set_tooltip_text("−1 = al azar. Con la misma semilla, letra y descripción sale la misma canción")
         bar.append(field("Semilla (−1 = azar)", self.music_seed))
+        self.music_cal = Gtk.DropDown(model=Gtk.StringList.new([n.split(" · ")[0] for _k, n in musica.CALIDADES]),
+                                      tooltip_text="\n".join(n for _k, n in musica.CALIDADES))
+        claves = [k for k, _n in musica.CALIDADES]
+        cal = self.cfg.get("musica_calidad", musica.CALIDAD_POR_DEFECTO)
+        self.music_cal.set_selected(claves.index(cal) if cal in claves else 0)
+        bar.append(field("Calidad", self.music_cal))
         self.music_go = Gtk.Button(child=Adw.ButtonContent(icon_name="media-record-symbolic", label="Generar canción"),
                                    tooltip_text="Se añade a la cola y se genera en segundo plano (usa la GPU)",
                                    halign=Gtk.Align.END, hexpand=True)
@@ -1059,7 +1065,8 @@ class JuglarWindow(Adw.ApplicationWindow):
             **{k: e.get_text().strip() for k, e in self.music_fields.items()},
             "letra": letra, "duracion": int(self.music_dur.get_value()),
             "idioma": musica.IDIOMAS[self.music_lang.get_selected()][0],
-            "semilla": int(self.music_seed.get_value()), "instrumental": not letra})
+            "semilla": int(self.music_seed.get_value()), "instrumental": not letra,
+            "calidad": musica.CALIDADES[self.music_cal.get_selected()][0]})
 
     def music_fill(self, c):
         """Pone cada parte de una canción en su campo."""
@@ -1076,6 +1083,8 @@ class JuglarWindow(Adw.ApplicationWindow):
             self.music_dur.set_value(float(c.get("duracion") or 0))
         if c.get("idioma") in [k for k, _n in musica.IDIOMAS]:
             self.music_lang.set_selected([k for k, _n in musica.IDIOMAS].index(c["idioma"]))
+        if c.get("calidad") in [k for k, _n in musica.CALIDADES]:
+            self.music_cal.set_selected([k for k, _n in musica.CALIDADES].index(c["calidad"]))
 
     def on_music_save(self, _btn):
         c = self.music_form()
@@ -1154,7 +1163,7 @@ class JuglarWindow(Adw.ApplicationWindow):
             self.toast("Describe cómo quieres que suene (el estilo, y si quieres la voz, los instrumentos…)")
             self.music_desc.grab_focus()
             return
-        self.cfg.update(musica_duracion=c["duracion"], musica_idioma=c["idioma"])
+        self.cfg.update(musica_duracion=c["duracion"], musica_idioma=c["idioma"], musica_calidad=c["calidad"])
         save_config(self.cfg)
         try:
             job = cola.add_musica(rutas.MUSICA / f"{musica.nombre_archivo(c['titulo'])}.mp3", c["descripcion"],
@@ -1232,7 +1241,9 @@ class JuglarWindow(Adw.ApplicationWindow):
             self.song_list.append(row)
         for c in songs:
             fecha = GLib.DateTime.new_from_unix_local(int(c["mtime"])).format("%d/%m %H:%M")
-            partes = [p for p in (c.get("descripcion", "")[:60], fecha) if p]
+            cant = c.get("letra_cantada")
+            partes = [p for p in (c.get("descripcion", "")[:60], fecha,
+                                  f"letra cantada {cant * 100:.0f} %" if isinstance(cant, (int, float)) else "") if p]
             row = Adw.ActionRow(title=c["titulo"], subtitle=" · ".join(partes), use_markup=False,
                                 subtitle_lines=2, activatable=True)
             row.set_tooltip_text(c.get("descripcion") or Path(c["audio"]).name)
