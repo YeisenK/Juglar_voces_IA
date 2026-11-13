@@ -3,6 +3,7 @@
 #
 #   ./install.sh               todo: Piper, Kokoro, Qwen3-TTS (GPU) y Whisper
 #   SIN_QWEN=1 ./install.sh    solo las voces rápidas (Piper y Kokoro), sin GPU
+#   CON_MUSICA=1 ./install.sh  además, la música (ACE-Step 1.5, ~18 GB con modelos); si no, lo pregunta
 #
 # Es seguro volver a ejecutarlo: lo que ya está instalado se deja como está, salvo las voces que cambiaron
 # en el repositorio, que se actualizan guardando copia (ACTUALIZAR_VOCES=1 / =0 para no preguntar).
@@ -96,6 +97,26 @@ for m in ("Qwen/Qwen3-TTS-12Hz-1.7B-Base", "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign
   "$DATA/whisper/bin/python" -c '
 from faster_whisper import WhisperModel
 print("    large-v3-turbo"); WhisperModel("large-v3-turbo", device="cpu", compute_type="int8")'
+fi
+
+# ---------------------------------------------------------------- 3b. música (opcional): ACE-Step 1.5
+ACESTEP_REPO="https://github.com/ACE-Step/ACE-Step-1.5.git"
+ACESTEP_VERSION="ca1e85f"   # la versión con la que se probó Juglar
+if [[ -x "$DATA/acestep/.venv/bin/python" ]]; then
+  musica=0   # ya está: no se toca
+elif [[ -n "${CON_MUSICA:-}" ]]; then
+  musica="$CON_MUSICA"
+elif [[ -t 0 && -z "${SIN_QWEN:-}" ]]; then
+  read -r -p "¿Instalar también la música (canciones con ACE-Step, unos 18 GB)? [s/N] " r </dev/tty || r=""
+  [[ "$r" =~ ^[sSyY] ]] && musica=1 || musica=0
+else
+  musica=0
+fi
+if [[ "$musica" == 1 ]]; then
+  paso "Música: ACE-Step 1.5 en $DATA/acestep (los modelos, ~10 GB, se bajan al generar la primera canción)"
+  [[ -d "$DATA/acestep/.git" ]] || git clone "$ACESTEP_REPO" "$DATA/acestep"
+  git -C "$DATA/acestep" checkout -q "$ACESTEP_VERSION" || aviso "No se pudo fijar la versión $ACESTEP_VERSION; se usa la última"
+  (cd "$DATA/acestep" && UV_PYTHON=$PY uv sync)
 fi
 
 # ---------------------------------------------------------------- 4. voces de Qwen y ajustes

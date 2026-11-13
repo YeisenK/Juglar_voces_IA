@@ -31,6 +31,7 @@ Los juglares iban de pueblo en pueblo contando historias y dando voz a cada pers
 - **Python 3** del sistema con PyGObject, `ffmpeg`, `aplay` (alsa-utils) y `curl`.
 - Para las voces de **Qwen3-TTS**, que son las de mejor calidad: una tarjeta **NVIDIA con unos 8 GB** de memoria (probado con una RTX 4060 Laptop) y unos **15 GB** de disco para modelos y entornos.
 - Sin GPU funcionan las voces de Piper y Kokoro (ver `SIN_QWEN` abajo).
+- Para la **música** (opcional), unos **18 GB** más de disco; usa la misma tarjeta.
 
 ## Instalación
 
@@ -45,7 +46,8 @@ El instalador:
 1. Comprueba los paquetes del sistema y te dice qué instalar si falta algo. En Fedora: `sudo dnf install ffmpeg alsa-utils curl python3-gobject gtk4 libadwaita`.
 2. Instala [`uv`](https://docs.astral.sh/uv/) si no lo tienes y crea tres entornos de Python en `~/.local/share/juglar`: Piper/Kokoro, Qwen3-TTS y Whisper.
 3. Descarga las voces de Piper, el modelo de Kokoro y los modelos de Qwen3-TTS y Whisper (unos 9 GB la primera vez).
-4. Copia las voces incluidas, crea los comandos en `~/.local/bin` y añade Juglar al menú de aplicaciones.
+4. Pregunta si quieres la música (ACE-Step 1.5); `CON_MUSICA=1 ./install.sh` la instala sin preguntar.
+5. Copia las voces incluidas, crea los comandos en `~/.local/bin` y añade Juglar al menú de aplicaciones.
 
 Sin tarjeta NVIDIA, instala solo las voces rápidas:
 
@@ -57,16 +59,17 @@ Se puede volver a ejecutar cuando quieras (por ejemplo, tras un `git pull`): lo 
 
 ## Uso
 
-Abre **Juglar** desde el menú de aplicaciones o escribe `juglar`. La app tiene cuatro pestañas:
+Abre **Juglar** desde el menú de aplicaciones o escribe `juglar`. La app tiene cinco pestañas:
 
 | Pestaña | Para qué |
 |---|---|
 | **Leer** | Escribir, pegar o abrir un texto y escucharlo. A la derecha, *Propiedades*: duración estimada, quién habla en el texto y **Exportar a audio…** |
-| **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. **Exportar carpeta…** convierte un libro entero (una carpeta, un capítulo por archivo). En cada audio terminado, **Rehacer un trozo** vuelve a generar solo la frase que salió mal. |
+| **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. **Exportar carpeta…** convierte un libro entero (una carpeta, un capítulo por archivo). En cada audio terminado, **Rehacer un trozo** vuelve a generar solo la frase que salió mal, o carga el `.md` corregido y rehace solo lo que cambió. **Historial**: los audios exportados que siguen en la computadora. |
 | **Voces** | Escuchar cada voz o personaje (*Probar*), ajustar su temperatura, crear personajes con nombre y voces nuevas. |
 | **Audiolibro** | Modo flash, pausas, voz de los diálogos, revisión con Whisper, volumen y diccionario de pronunciación. |
+| **Música** | Canciones con tu letra y la música descrita con tus palabras («balada folk con guitarra y voz cálida»), con [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5). Ver [la guía](docs/GUIA.md#8-música-canciones-con-tu-letra). |
 
-Atajos: `Ctrl+Intro` leer/pausar · `Esc` detener · `Ctrl+O` abrir y leer · `Ctrl+Mayús+E` exportar · `Ctrl+1…4` cambiar de pestaña.
+Atajos: `Ctrl+Intro` leer/pausar · `Esc` detener · `Ctrl+O` abrir y leer · `Ctrl+Mayús+E` exportar · `Ctrl+1…5` cambiar de pestaña.
 
 ### Cómo escribir tus textos
 
@@ -99,6 +102,8 @@ A la mañana siguiente, el camino estaba cubierto de nieve.
 | `juglar-cola add *.md` · `list` · `pause` · `resume` | Maneja la cola de exportación. |
 | `juglar-cola libro CARPETA` | Exporta un libro entero: cada `.md`/`.txt` de la carpeta es un capítulo; los audios van a `CARPETA/audio/`. Ver [libros por carpetas](docs/GUIA.md#6-libros-por-carpetas). |
 | `md2audio AUDIO --fragmentos` · `juglar-cola rehacer AUDIO N` | Lista los trozos de un audio exportado y vuelve a generar el trozo N. Ver [rehacer un trozo](docs/GUIA.md#7-rehacer-un-trozo-de-un-audio). |
+| `juglar-cola rehacer AUDIO --md CORREGIDO.md` | Rehace solo los trozos que cambiaron en el texto corregido (`md2audio AUDIO --comparar CORREGIDO.md` los enseña antes). |
+| `juglar-cola musica --letra LETRA.md -d "descripción" -t 120` | Genera una canción con ACE-Step (en `~/Música/Juglar`). |
 | `juglar-pruebas` | Genera de una vez las pruebas de voz que falten. |
 
 ## Dónde se guarda cada cosa

@@ -5,7 +5,8 @@ Un proceso residente (`cola.py daemon`, lanzado con systemd-run --user) va toman
 de la cola de uno en uno. Es independiente de la ventana: sigue con la pantalla apagada o bloqueada,
 y mientras convierte impide que el equipo se suspenda solo. El estado vive en un JSON con candado.
 
-Uso: juglar-cola add ARCHIVO... | libro CARPETA | rehacer AUDIO N [--texto T]
+Uso: juglar-cola add ARCHIVO... | libro CARPETA | rehacer AUDIO N [--texto T] | rehacer AUDIO --md CORREGIDO.md
+                  | musica -d DESCRIPCIÓN [--letra ARCHIVO] [-t SEGUNDOS] [-o SALIDA]
                   | list | pause | resume | cancel ID | remove ID | clear
 """
 import argparse
@@ -28,12 +29,14 @@ import rutas  # noqa: E402
 
 VENV_PY = rutas.VENV_PY
 MD2AUDIO = APP_DIR / "md2audio.py"
+MUSICA_WORKER = rutas.MOTORES / "musica_worker.py"
 STATE = rutas.STATE / "cola"
 QUEUE = STATE / "cola.json"
 LOCK = STATE / "cola.lock"
 DAEMON_LOCK = STATE / "daemon.lock"
 TEXTS = STATE / "textos"
 LOG = STATE / "cola.log"
+HISTORIAL = STATE / "historial.json"   # audios exportados (se muestran mientras sigan existiendo)
 DEFAULT_VOICE = "qwen:narradora"
 FINISHED = ("done", "failed", "cancelled")
 
@@ -137,6 +140,109 @@ def add_rehacer(audio, n, texto=None):
     job = update(_add)
     ensure_daemon()
     return job
+
+
+def add_actualizar(audio, nuevo):
+    """Encola rehacer solo los trozos de un audio que cambiaron en su texto corregido (md2audio --actualizar)."""
+    audio, nuevo = Path(audio), Path(nuevo).resolve()
+    mapa = json.loads(Path(audio.with_name(f".{audio.name}.juglar.json")).read_text())
+
+    def _add(q):
+        job_id = q["next"]
+        q["next"] += 1
+        job = {"id": job_id, "src": str(audio), "out": str(audio), "voice": mapa["voz"], "speed": mapa["velocidad"],
+               "args": [str(audio), "--actualizar", str(nuevo), "--json"],
+               "title": f"{audio.name} · cambios de {nuevo.name}", "status": "queued", "done": 0, "total": 0,
+               "eta": None, "message": None, "duration": None, "chapters": None, "added": time.time()}
+        q["jobs"].append(job)
+        return job
+
+    job = update(_add)
+    ensure_daemon()
+    return job
+
+
+def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es", instrumental=False,
+               titulo=None, overwrite=False):
+    """Encola generar una canción con ACE-Step (motores/musica_worker.py). Devuelve el trabajo."""
+    if not rutas.ACESTEP_PY.exists():
+        raise RuntimeError("ACE-Step no está instalado (vuelve a ejecutar install.sh y acepta la música)")
+    import musica
+    letra = musica.normalizar_letra(letra or "")
+    out = Path(salida)
+    if not overwrite:
+        out = free_name(out)
+
+    def _add(q):
+        job_id = q["next"]
+        q["next"] += 1
+        folder = TEXTS / str(job_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        pet = folder / "peticion.json"
+        pet.write_text(json.dumps({"salida": str(out), "titulo": titulo or out.stem, "descripcion": descripcion,
+                                   "letra": letra, "duracion": duracion, "semilla": semilla, "idioma": idioma,
+                                   "instrumental": instrumental}, ensure_ascii=False), encoding="utf-8")
+        job = {"id": job_id, "tipo": "musica", "src": str(pet), "out": str(out), "voice": "musica", "speed": 1.0,
+               "cmd": [str(rutas.ACESTEP_PY), str(MUSICA_WORKER), str(pet)],
+               "title": f"♪ {titulo or out.stem}", "status": "queued", "done": 0, "total": 0, "eta": None,
+               "message": None, "duration": None, "chapters": None, "added": time.time()}
+        q["jobs"].append(job)
+        return job
+
+    job = update(_add)
+    ensure_daemon()
+    return job
+
+
+def _anotar(h, job, ev, cuando=None):
+    out = str(Path(job["out"]).resolve())
+    cuando = cuando or time.time()
+    e = h.setdefault(out, {"audio": out, "creado": cuando, "rehechos": 0})
+    if not job.get("args"):
+        e["titulo"] = job["title"]
+    e.update(voz=job["voice"], duracion=ev.get("duration"), capitulos=ev.get("chapters"), modificado=cuando)
+    if job.get("args"):
+        e["rehechos"] = e.get("rehechos", 0) + (ev.get("cambios") or 1)
+    e["titulo"] = e.get("titulo") or Path(out).name
+    e.setdefault("jobs", []).append(job["id"])
+
+
+def _leer_historial():
+    try:
+        return json.loads(HISTORIAL.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _guardar_historial(h):
+    tmp = HISTORIAL.with_suffix(".tmp")
+    tmp.write_text(json.dumps(h, ensure_ascii=False))
+    os.replace(tmp, HISTORIAL)
+
+
+def registrar(job, ev):
+    """Anota en el historial un audio terminado (o que se le rehízo un trozo)."""
+    with locked():
+        h = _leer_historial()
+        _anotar(h, job, ev)
+        _guardar_historial(h)
+
+
+def historial():
+    """Audios exportados que siguen en la computadora, del más reciente al más antiguo (los borrados se olvidan).
+    Los trabajos terminados de la cola que aún no estén anotados se añaden aquí."""
+    with locked():
+        h = _leer_historial()
+        cambiado = False
+        vistos = {j for e in h.values() for j in e.get("jobs", [])}
+        for job in load()["jobs"]:
+            if job.get("status") == "done" and job.get("tipo") != "musica" and job["id"] not in vistos:
+                _anotar(h, job, job, job.get("started") or job.get("added"))
+                cambiado = True
+        vivos = {k: e for k, e in h.items() if Path(k).exists()}
+        if cambiado or len(vivos) != len(h):
+            _guardar_historial(vivos)
+    return sorted(vivos.values(), key=lambda e: -e.get("modificado", 0))
 
 
 def cancel_job(job_id):
@@ -247,7 +353,7 @@ def run_job(job, inhibit):
     tmp.mkdir(parents=True, exist_ok=True)
     args = job.get("args") or [job["src"], "-o", job["out"], "-v", job["voice"], "-s", f"{job['speed']:.3f}", "--json"]
     proc = subprocess.Popen(
-        [str(VENV_PY), "-I", str(MD2AUDIO), *args],
+        job.get("cmd") or [str(VENV_PY), "-I", str(MD2AUDIO), *args],
         stdout=subprocess.PIPE, stderr=log, preexec_fn=_die_with_parent, env={**os.environ, "TMPDIR": str(tmp)})
     os.set_blocking(proc.stdout.fileno(), False)
     inhibit.acquire()
@@ -281,6 +387,8 @@ def run_job(job, inhibit):
                 return None, True, q["paused"]
             if progress:
                 j.update(done=progress["done"], total=progress["total"], eta=progress.get("eta"))
+                if progress.get("fase"):
+                    j["fase"] = progress["fase"]
             return j, bool(j.get("cancel")), q["paused"]
 
         _, want_cancel, paused = update(_tick)
@@ -349,7 +457,10 @@ def work_loop():
                 j["done"] = 0
         update(_finish)
         cleanup_text(job)
-        if status == "done":
+        if status == "done" and job.get("tipo") == "musica":
+            notify("Canción lista", Path(job["out"]).name)
+        elif status == "done":
+            registrar(job, ev or {})
             notify("Audio listo", Path(job["out"]).name)
         elif status == "failed":
             notify("No se pudo convertir", f"{job['title']}: {message}")
@@ -395,7 +506,8 @@ def describe(job, paused):
         if paused:
             return f"en pausa ({pct} %)"
         eta = f", quedan ~{fmt_time(job['eta'])}" if job.get("eta") else ""
-        return f"{pct} %{eta}" if job["total"] else "preparando voz"
+        fase = f" · {job['fase']}" if job.get("tipo") == "musica" and job.get("fase") else ""
+        return f"{pct} %{eta}{fase}" if job["total"] else "preparando voz"
     if st == "done":
         return f"listo, {fmt_time(job['duration'])} de audio"
     return job.get("message") or ("cancelado" if st == "cancelled" else "error")
@@ -418,8 +530,16 @@ def main():
     lb.add_argument("-f", "--format", help="mp3, ogg, m4b o wav (si no, el de juglar.json o mp3)")
     rh = sub.add_parser("rehacer", help="volver a generar un trozo de un audio exportado (md2audio AUDIO --fragmentos los lista)")
     rh.add_argument("audio", type=Path)
-    rh.add_argument("n", type=int, help="número del fragmento")
+    rh.add_argument("n", type=int, nargs="?", help="número del fragmento")
+    rh.add_argument("--md", type=Path, help="texto corregido: rehace solo los trozos que cambiaron")
     rh.add_argument("--texto", help="texto nuevo para ese fragmento (por defecto, el mismo)")
+    mu = sub.add_parser("musica", help="generar una canción con ACE-Step (letra + descripción en lenguaje natural)")
+    mu.add_argument("-d", "--descripcion", required=True, help="estilo, instrumentos, voz, ambiente…")
+    mu.add_argument("--letra", type=Path, help="archivo .txt/.md con la letra ([Verse], [Chorus]…); sin letra = instrumental")
+    mu.add_argument("-t", "--duracion", type=float, default=0, help="segundos (10-600); 0 = la que elija el modelo")
+    mu.add_argument("--semilla", type=int, default=-1)
+    mu.add_argument("--idioma", default="es")
+    mu.add_argument("-o", "--output", type=Path, help="archivo de salida (por defecto en ~/Música/Juglar)")
     ls = sub.add_parser("list", help="ver la cola")
     ls.add_argument("--json", action="store_true")
     for name, h in (("pause", "pausar la cola"), ("resume", "reanudar la cola"), ("clear", "quitar los terminados"),
@@ -460,11 +580,22 @@ def main():
             hechos += 1
         print(f"{hechos} capítulo(s) en la cola")
     elif args.cmd == "rehacer":
+        if (args.n is None) == (args.md is None):
+            sys.exit("Indica el número del trozo o --md con el texto corregido")
         try:
-            job = add_rehacer(args.audio.resolve(), args.n, args.texto)
+            job = (add_actualizar(args.audio.resolve(), args.md) if args.md
+                   else add_rehacer(args.audio.resolve(), args.n, args.texto))
         except (OSError, ValueError):
             sys.exit("Ese audio no tiene mapa de fragmentos: vuelve a exportarlo con esta versión de Juglar")
         print(f"#{job['id']} {job['title']}")
+    elif args.cmd == "musica":
+        import musica
+        titulo, letra = musica.leer_letra(args.letra) if args.letra else (
+            args.output.stem if args.output else "Canción", "")
+        out = args.output or rutas.MUSICA / f"{musica.nombre_archivo(titulo)}.mp3"
+        job = add_musica(out, args.descripcion, letra, args.duracion, args.semilla, args.idioma,
+                         instrumental=not letra.strip(), titulo=titulo)
+        print(f"#{job['id']}  {job['title']}  →  {job['out']}")
     elif args.cmd == "list":
         q = snapshot()
         if args.json:

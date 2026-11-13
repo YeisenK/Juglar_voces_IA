@@ -28,6 +28,7 @@ import rutas  # noqa: E402
 import cola  # noqa: E402
 import libro  # noqa: E402
 import md2audio  # noqa: E402  (solo para los ajustes de Qwen; no carga ningún motor)
+import musica  # noqa: E402
 import pruebas  # noqa: E402
 
 CONFIG = rutas.CONFIG / "juglar.json"
@@ -81,6 +82,8 @@ def qwen_name(spec):
 
 def short_label(spec):
     """Nombre de la voz sin el motor: «Narrador de audiolibros», «Dora (mujer)»…"""
+    if spec == "musica":
+        return "ACE-Step"
     if spec.startswith("qwen:"):
         return md2audio.nombre_voz(spec.split(":", 1)[1])
     if spec.startswith("kokoro:"):
@@ -93,6 +96,8 @@ def short_label(spec):
 
 
 def engine_of(spec):
+    if spec == "musica":
+        return "Música"
     return "Qwen" if spec.startswith("qwen:") else "Kokoro" if spec.startswith("kokoro:") else "Piper"
 
 
@@ -362,6 +367,8 @@ class JobRow:
             eta = job.get("eta")
             if paused:
                 sub = "En pausa"
+            elif job.get("tipo") == "musica":
+                sub = job.get("fase") or "Generando la canción…"
             elif job["total"] == 0:
                 sub = "Preparando la voz…"
             elif frac >= 1:
@@ -396,6 +403,7 @@ PAGES = [  # (nombre, título, icono)
     ("cola", "Exportar", "document-send-symbolic"),
     ("voces", "Voces", "audio-input-microphone-symbolic"),
     ("ajustes", "Audiolibro", "emblem-system-symbolic"),
+    ("musica", "Música", "audio-x-generic-symbolic"),
 ]
 
 
@@ -434,7 +442,8 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=120,
                                hexpand=True, vexpand=True)
         builders = {"leer": self.build_read_page, "cola": self.build_queue_page,
-                    "voces": self.build_voices_page, "ajustes": self.build_settings_page}
+                    "voces": self.build_voices_page, "ajustes": self.build_settings_page,
+                    "musica": self.build_music_page}
         for name, _t, _i in PAGES:
             self.stack.add_named(builders[name](), name)
 
@@ -496,6 +505,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         small.add_setter(self.inspector, "visible", GObject.Value(bool, False))
         small.add_setter(self.voice_side, "visible", GObject.Value(bool, False))
         small.add_setter(self.voice_pick, "visible", GObject.Value(bool, True))
+        small.add_setter(self.music_side, "visible", GObject.Value(bool, False))
         self.add_breakpoint(medium)
         self.add_breakpoint(small)
 
@@ -544,7 +554,10 @@ class JuglarWindow(Adw.ApplicationWindow):
         if name in self.rail_buttons and not self.rail_buttons[name].get_active():
             self.rail_buttons[name].set_active(True)
         sub = {"leer": self.doc_name or "Texto sin guardar", "cola": "Cola de exportación",
-               "voces": "Voces y personajes", "ajustes": "Ajustes del audiolibro"}.get(name, "")
+               "voces": "Voces y personajes", "ajustes": "Ajustes del audiolibro",
+               "musica": "Canciones con ACE-Step"}.get(name, "")
+        if name == "musica":
+            self.refresh_songs()
         self.win_title.set_subtitle(sub)
 
     # ------------------------------------------------------------ barra de estado
@@ -802,6 +815,9 @@ class JuglarWindow(Adw.ApplicationWindow):
                                      lambda *_: (cola.clear_finished(), self.refresh_queue()), "flat")
         right.append(self.clear_btn)
         right.append(self.pause_btn)
+        right.append(tool_button("document-open-recent-symbolic", "Historial",
+                                 "Los audios exportados que siguen en la computadora: escucharlos o rehacer un trozo",
+                                 self.open_history, "flat"))
         right.append(tool_button("folder-symbolic", "Exportar carpeta…",
                                  "Un libro: todos los capítulos (.md o .txt) de una carpeta, en orden",
                                  self.on_export_folder, "flat"))
@@ -866,6 +882,257 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.queue_stack.add_named(listing, "lista")
         root.append(self.queue_stack)
         return root
+
+    # ------------------------------------------------------------ página: Música (ACE-Step)
+    def build_music_page(self):
+        root = Gtk.Box()
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
+        head, right = strip("Canción")
+        right.append(tool_button("document-open-symbolic", "Abrir letra…", "Cargar la letra de un .txt o .md",
+                                 self.on_music_open, "flat"))
+        right.append(tool_button("edit-clear-all-symbolic", "Nueva", "Vaciar la letra, la descripción y el título",
+                                 self.on_music_clear, "flat"))
+        left.append(head)
+
+        form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=12, margin_start=16,
+                       margin_end=16, margin_bottom=10)
+        top = Gtk.Box(spacing=10)
+        self.music_title = Gtk.Entry(placeholder_text="Título (nombre del archivo)", hexpand=True)
+        top.append(field("Título", self.music_title))
+        self.music_title.set_hexpand(True)
+        form.append(top)
+
+        desc_head = Gtk.Box(spacing=8)
+        desc_head.append(label("CÓMO SUENA", "field-label", xalign=0, hexpand=True, valign=Gtk.Align.CENTER))
+        ideas = Gio.Menu()
+        for i, (nombre, _d) in enumerate(musica.EJEMPLOS):
+            ideas.append(nombre, f"win.musica-ejemplo({i})")
+        act = Gio.SimpleAction.new("musica-ejemplo", GLib.VariantType.new("i"))
+        act.connect("activate", lambda _a, v: self.music_desc.get_buffer().set_text(musica.EJEMPLOS[v.get_int32()][1]))
+        self.add_action(act)
+        ej = Gtk.MenuButton(menu_model=ideas, child=Adw.ButtonContent(icon_name="starred-symbolic", label="Ejemplos"),
+                            tooltip_text="Rellenar con una descripción de ejemplo")
+        ej.add_css_class("flat")
+        desc_head.append(ej)
+        form.append(desc_head)
+        self.music_desc = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=8, bottom_margin=8,
+                                       left_margin=10, right_margin=10)
+        self.music_desc.add_css_class("editor")
+        self.music_desc.add_css_class("music-desc")
+        dhint = label("Describe la música con tus palabras: estilo, instrumentos, tipo de voz, tempo, ambiente…\n"
+                      "p. ej. «balada folk con guitarra española y voz masculina cálida, lenta»",
+                      "hint", xalign=0, can_target=False, valign=Gtk.Align.START, margin_start=12, margin_top=8,
+                      wrap=True)
+        dscroll = Gtk.ScrolledWindow(child=self.music_desc, height_request=74, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        dscroll.add_css_class("music-box")
+        dover = Gtk.Overlay(child=dscroll)
+        dover.add_overlay(dhint)
+        self.music_desc.get_buffer().connect("changed", lambda b: dhint.set_visible(b.get_char_count() == 0))
+        form.append(dover)
+        lyr_head = Gtk.Box(spacing=8, margin_top=4)
+        lyr_head.append(label("LETRA", "field-label", xalign=0, valign=Gtk.Align.CENTER))
+        lyr_head.append(label("[Estrofa]  [Estribillo]  [Puente]  [Intro]  [Final] — o en inglés: [Verse], [Chorus]…",
+                              "job-sub", xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END,
+                              valign=Gtk.Align.CENTER))
+        form.append(lyr_head)
+        left.append(form)
+
+        self.music_lyrics = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=16, bottom_margin=16,
+                                         left_margin=24, right_margin=24, pixels_below_lines=3)
+        self.music_lyrics.add_css_class("editor")
+        lhint = label("Escribe o pega la letra de tu canción, o ábrela de un archivo.\n"
+                      "Sin letra, la canción sale instrumental.", "hint", justify=Gtk.Justification.CENTER,
+                      can_target=False, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        self.music_lyrics.get_buffer().connect("changed", lambda b: (lhint.set_visible(b.get_char_count() == 0),
+                                                                     self.update_music_button()))
+        lscroll = Gtk.ScrolledWindow(child=self.music_lyrics, vexpand=True)
+        lscroll.add_css_class("editor-frame")
+        lover = Gtk.Overlay(child=lscroll, vexpand=True)
+        lover.add_overlay(lhint)
+        left.append(lover)
+
+        bar = Adw.WrapBox(child_spacing=18, line_spacing=8)
+        bar.add_css_class("transport")
+        self.music_dur = Gtk.SpinButton.new_with_range(0, 480, 5)
+        self.music_dur.set_value(self.cfg.get("musica_duracion", 120))
+        self.music_dur.set_tooltip_text("Segundos (0 = que lo decida el modelo según la letra; máximo 8 min)")
+        dur_box = Gtk.Box(spacing=6)
+        dur_box.append(self.music_dur)
+        self.music_dur_lbl = label("", "job-sub", width_chars=10, xalign=0, valign=Gtk.Align.CENTER)
+        self.music_dur.connect("value-changed", self._music_dur_text)
+        self._music_dur_text(self.music_dur)
+        dur_box.append(self.music_dur_lbl)
+        bar.append(field("Duración", dur_box))
+        self.music_lang = Gtk.DropDown(model=Gtk.StringList.new([n for _c, n in musica.IDIOMAS]))
+        codes = [c for c, _n in musica.IDIOMAS]
+        self.music_lang.set_selected(codes.index(self.cfg.get("musica_idioma", "es"))
+                                     if self.cfg.get("musica_idioma", "es") in codes else 0)
+        bar.append(field("Idioma", self.music_lang))
+        self.music_seed = Gtk.SpinButton.new_with_range(-1, 2 ** 31 - 1, 1)
+        self.music_seed.set_value(-1)
+        self.music_seed.set_tooltip_text("−1 = al azar. Con la misma semilla, letra y descripción sale la misma canción")
+        bar.append(field("Semilla (−1 = azar)", self.music_seed))
+        self.music_go = Gtk.Button(child=Adw.ButtonContent(icon_name="media-record-symbolic", label="Generar canción"),
+                                   tooltip_text="Se añade a la cola y se genera en segundo plano (usa la GPU)",
+                                   halign=Gtk.Align.END, hexpand=True)
+        self.music_go.add_css_class("suggested-action")
+        self.music_go.add_css_class("pill")
+        self.music_go.connect("clicked", self.on_music_generate)
+        bar.append(self.music_go)
+        left.append(bar)
+        root.append(left)
+
+        # canciones generadas
+        side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, width_request=360)
+        side.add_css_class("inspector")
+        shead, sright = strip("Canciones")
+        sright.append(tool_button("folder-open-symbolic", "Carpeta", f"Abrir {rutas.MUSICA}",
+                                  lambda *_: (rutas.MUSICA.mkdir(parents=True, exist_ok=True),
+                                              self.launch(rutas.MUSICA)), "flat"))
+        side.append(shead)
+        self.song_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.song_list.add_css_class("joblist")
+        self.song_list.set_placeholder(Adw.StatusPage(
+            icon_name="audio-x-generic-symbolic", title="Sin canciones",
+            description="Escribe la letra, describe cómo quieres que suene y pulsa «Generar canción»."))
+        side.append(Gtk.ScrolledWindow(child=self.song_list, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER))
+        root.append(side)
+        self.music_side = side
+        self.music_sig = None
+        if not rutas.ACESTEP_PY.exists():
+            self.music_go.set_sensitive(False)
+            self.music_go.set_tooltip_text("ACE-Step no está instalado: ejecuta install.sh y acepta la música")
+        return root
+
+    def _music_dur_text(self, spin):
+        v = int(spin.get_value())
+        self.music_dur_lbl.set_label("s · automática" if v == 0 else f"s · {v // 60}:{v % 60:02d} min")
+
+    def update_music_button(self):
+        if not hasattr(self, "music_go"):
+            return
+        b = self.music_lyrics.get_buffer()
+        inst = b.get_char_count() == 0
+        self.music_go.set_child(Adw.ButtonContent(icon_name="media-record-symbolic",
+                                                  label="Generar instrumental" if inst else "Generar canción"))
+
+    def _tv_text(self, tv):
+        b = tv.get_buffer()
+        return b.get_text(*b.get_bounds(), False).strip()
+
+    def on_music_open(self, _btn):
+        self.file_dialog("Abre la letra de la canción").open(self, None, self._music_open_done)
+
+    def _music_open_done(self, dialog, res):
+        try:
+            path = dialog.open_finish(res).get_path()
+        except GLib.Error:
+            return
+        self.load_lyrics(path)
+
+    def load_lyrics(self, path):
+        try:
+            titulo, letra = musica.leer_letra(path)
+        except OSError as e:
+            self.toast(f"No se pudo abrir: {e}")
+            return
+        self.music_title.set_text(titulo)
+        self.music_lyrics.get_buffer().set_text(letra)
+        self.toast(f"Letra cargada: {Path(path).name}")
+
+    def on_music_clear(self, _btn):
+        for tv in (self.music_lyrics, self.music_desc):
+            tv.get_buffer().set_text("")
+        self.music_title.set_text("")
+        self.music_seed.set_value(-1)
+
+    def on_music_generate(self, _btn):
+        desc, letra = self._tv_text(self.music_desc), self._tv_text(self.music_lyrics)
+        if not desc:
+            self.toast("Describe cómo quieres que suene (estilo, instrumentos, voz…)")
+            self.music_desc.grab_focus()
+            return
+        titulo = self.music_title.get_text().strip() or (letra.splitlines()[0].strip("[]# ")[:40] if letra
+                                                          else "Instrumental")
+        lang = musica.IDIOMAS[self.music_lang.get_selected()][0]
+        dur = int(self.music_dur.get_value())
+        self.cfg.update(musica_duracion=dur, musica_idioma=lang)
+        save_config(self.cfg)
+        try:
+            job = cola.add_musica(rutas.MUSICA / f"{musica.nombre_archivo(titulo)}.mp3", desc, letra, dur,
+                                  int(self.music_seed.get_value()), lang, instrumental=not letra, titulo=titulo)
+        except (RuntimeError, OSError) as e:
+            self.toast(str(e))
+            return
+        self.refresh_queue()
+        self.toast(f"«{titulo}» en cola (#{job['id']}): sale en la lista de la derecha cuando esté")
+
+    def music_reuse(self, c):
+        self.music_title.set_text(c.get("titulo", ""))
+        self.music_desc.get_buffer().set_text(c.get("descripcion", ""))
+        self.music_lyrics.get_buffer().set_text(c.get("letra", ""))
+        if c.get("duracion") is not None:
+            self.music_dur.set_value(float(c.get("duracion") or 0))
+        if c.get("semilla_usada") is not None:
+            try:
+                self.music_seed.set_value(int(str(c["semilla_usada"]).split(",")[0]))
+            except ValueError:
+                pass
+        self.toast("Cargada con su semilla: cambia algo (o pon la semilla al azar) y vuelve a generar")
+
+    def music_delete(self, c):
+        musica.borrar(c["audio"])
+        self.refresh_songs(force=True)
+        self.toast(f"«{Path(c['audio']).name}» a la papelera")
+
+    def refresh_songs(self, jobs=None, force=False):
+        if not hasattr(self, "song_list"):
+            return
+        jobs = [j for j in (jobs if jobs is not None else cola.snapshot()["jobs"])
+                if j.get("tipo") == "musica" and j["status"] in ("queued", "running", "failed")]
+        songs = musica.canciones()
+        sig = (tuple((j["id"], j["status"], j["done"], j.get("fase")) for j in jobs),
+               tuple((s["audio"], s["mtime"]) for s in songs))
+        if sig == self.music_sig and not force:
+            return
+        self.music_sig = sig
+        while (child := self.song_list.get_first_child()) is not None:
+            self.song_list.remove(child)
+        for j in jobs:
+            row = Adw.ActionRow(title=j["title"].lstrip("♪ "), use_markup=False)
+            if j["status"] == "running":
+                row.set_subtitle(f"{j['done']} % · {j.get('fase') or 'Generando…'}")
+                spin = Adw.Spinner(valign=Gtk.Align.CENTER)
+                row.add_prefix(spin)
+            elif j["status"] == "queued":
+                row.set_subtitle("En cola")
+                row.add_prefix(Gtk.Image(icon_name="content-loading-symbolic"))
+            else:
+                row.set_subtitle(j.get("message") or "No se pudo generar")
+                row.add_prefix(Gtk.Image(icon_name="dialog-warning-symbolic"))
+            self.song_list.append(row)
+        for c in songs:
+            fecha = GLib.DateTime.new_from_unix_local(int(c["mtime"])).format("%d/%m %H:%M")
+            partes = [p for p in (c.get("descripcion", "")[:60], fecha) if p]
+            row = Adw.ActionRow(title=c["titulo"], subtitle=" · ".join(partes), use_markup=False,
+                                subtitle_lines=2, activatable=True)
+            row.set_tooltip_text(c.get("descripcion") or Path(c["audio"]).name)
+            row.connect("activated", lambda _r, a=c["audio"]: self.launch(a))
+            row.add_prefix(Gtk.Image(icon_name="audio-x-generic-symbolic"))
+            menu = Gtk.Box(spacing=0, valign=Gtk.Align.CENTER)
+            for icon, tip, cb, ok in (
+                    ("media-playback-start-symbolic", "Escuchar", lambda _b, a=c["audio"]: self.launch(a), True),
+                    ("view-refresh-symbolic", "Cargar letra, descripción y semilla para repetirla o variarla",
+                     lambda _b, cc=c: self.music_reuse(cc), bool(c.get("descripcion") or c.get("letra"))),
+                    ("folder-open-symbolic", "Abrir carpeta", lambda _b, a=c["audio"]: self.launch(a, folder=True),
+                     True),
+                    ("user-trash-symbolic", "Mandar a la papelera", lambda _b, cc=c: self.music_delete(cc), True)):
+                b = Gtk.Button(icon_name=icon, tooltip_text=tip, visible=ok)
+                b.add_css_class("flat")
+                b.connect("clicked", cb)
+                menu.append(b)
+            row.add_suffix(menu)
+            self.song_list.append(row)
 
     # ------------------------------------------------------------ página: Voces y personajes
     def build_voices_page(self):
@@ -2052,6 +2319,52 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.confirmar_marcas([(c.name, c.read_text(encoding="utf-8", errors="replace")) for c in lib.capitulos],
                               preguntar, voice)
 
+    # --- historial de audios exportados (los que se borraron de la computadora ya no salen)
+    def open_history(self, _btn=None):
+        entradas = cola.historial()
+        dlg = Adw.Dialog(title="Historial de audios", content_width=780, content_height=620)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=6, margin_bottom=12,
+                      margin_start=12, margin_end=12)
+        box.append(label("Los audios que has exportado, mientras sigan en la computadora. El lápiz abre sus trozos "
+                         "para rehacer el que salió mal.", "desc", xalign=0, wrap=True))
+        if not entradas:
+            box.append(Adw.StatusPage(icon_name="document-open-recent-symbolic", vexpand=True,
+                                      title="Todavía no hay audios",
+                                      description="Aquí aparecerá cada audio que exportes (si no lo has borrado)."))
+        else:
+            search = Gtk.SearchEntry(placeholder_text="Buscar por nombre")
+            box.append(search)
+            lb = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+            lb.add_css_class("boxed-list")
+            for e in entradas:
+                audio = Path(e["audio"])
+                fecha = GLib.DateTime.new_from_unix_local(int(e.get("modificado", 0))).format("%d/%m/%Y %H:%M")
+                partes = [str(audio.parent), fmt_time(e.get("duracion")), fecha]
+                if e.get("rehechos"):
+                    partes.append(f"{e['rehechos']} trozo{'s' if e['rehechos'] > 1 else ''} rehecho"
+                                  f"{'s' if e['rehechos'] > 1 else ''}")
+                row = Adw.ActionRow(title=audio.name, subtitle=" · ".join(partes), use_markup=False)
+                row.clave = (audio.name + " " + e.get("titulo", "")).lower()
+                for icon, tip, cb, ok in (
+                        ("media-playback-start-symbolic", "Escuchar", lambda _b, a=audio: self.launch(a), True),
+                        ("document-edit-symbolic", "Rehacer un trozo", lambda _b, a=audio: self.open_fragments(a),
+                         md2audio.mapa_de(audio).exists()),
+                        ("folder-open-symbolic", "Abrir carpeta", lambda _b, a=audio: self.launch(a, folder=True), True)):
+                    b = Gtk.Button(icon_name=icon, tooltip_text=tip, valign=Gtk.Align.CENTER, visible=ok)
+                    b.add_css_class("flat")
+                    b.connect("clicked", cb)
+                    row.add_suffix(b)
+                lb.append(row)
+            q = lambda: search.get_text().strip().lower()  # noqa: E731
+            lb.set_filter_func(lambda r: not q() or q() in r.clave)
+            search.connect("search-changed", lambda *_: lb.invalidate_filter())
+            box.append(Gtk.ScrolledWindow(child=lb, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER))
+        view.set_content(box)
+        dlg.set_child(view)
+        dlg.present(self)
+
     # --- rehacer un trozo de un audio ya exportado
     def frag_voice(self, voz):
         if not voz:
@@ -2075,13 +2388,32 @@ class JuglarWindow(Adw.ApplicationWindow):
                       margin_start=12, margin_end=12)
         box.append(label("Busca la frase que salió mal, escúchala y pulsa «Rehacer». Solo se vuelve a generar ese "
                          "trozo, con la misma voz; el resto del audio no se toca.", "desc", xalign=0, wrap=True))
+        # o, de golpe: cargar el texto corregido y rehacer solo lo que cambió
+        nuevo_box = Gtk.Box(spacing=8)
+        nuevo_box.add_css_class("card")
+        nuevo_box.append(Gtk.Image(icon_name="document-edit-symbolic", margin_start=12))
+        nuevo_box.append(label("¿Corregiste el texto? Carga el .md nuevo y Juglar te enseña qué trozos cambiaron "
+                               "para rehacer solo esos.", "job-sub", xalign=0, wrap=True, hexpand=True,
+                               margin_top=10, margin_bottom=10))
+        fuente = Path(mapa["fuente"]) if mapa.get("fuente") else None
+        if fuente and fuente.exists() and fuente.stat().st_mtime > audio.stat().st_mtime:
+            usar = Gtk.Button(label=f"Usar «{fuente.name}»", valign=Gtk.Align.CENTER,
+                              tooltip_text=f"{fuente}\nCambió después de exportar el audio")
+            usar.connect("clicked", lambda _b: self.show_changes(dlg, audio, fuente))
+            nuevo_box.append(usar)
+        cargar = Gtk.Button(label="Cargar .md corregido…", valign=Gtk.Align.CENTER, margin_end=10)
+        cargar.add_css_class("suggested-action")
+        cargar.connect("clicked", lambda _b: self.pick_corrected(dlg, audio, fuente))
+        nuevo_box.append(cargar)
+        box.append(nuevo_box)
         search = Gtk.SearchEntry(placeholder_text="Buscar en el texto")
         box.append(search)
         lb = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         lb.add_css_class("boxed-list")
         for i, f in enumerate(frs, 1):
             row = Adw.ActionRow(title=f["texto"], use_markup=False, title_lines=4,
-                                subtitle=f"{i} · {md2audio._mmss(f['inicio'] / rate)} · {self.frag_voice(f.get('voz'))}")
+                                subtitle=f"{i} · {md2audio._mmss(f['inicio'] / rate)} · {self.frag_voice(f.get('voz'))}"
+                                         + (" · rehecho" if f.get("rehecho") else ""))
             row.texto = f["texto"].lower()
             oir = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
                              tooltip_text="Escuchar este trozo")
@@ -2102,6 +2434,130 @@ class JuglarWindow(Adw.ApplicationWindow):
         dlg.set_child(view)
         dlg.connect("closed", lambda *_: self.stop())
         dlg.present(self)
+
+    def pick_corrected(self, parent, audio, fuente=None):
+        d = self.file_dialog("Elige el texto corregido")
+        if fuente and fuente.parent.is_dir():
+            d.set_initial_folder(Gio.File.new_for_path(str(fuente.parent)))
+
+        def hecho(dialog, res):
+            try:
+                path = dialog.open_finish(res).get_path()
+            except GLib.Error:
+                return
+            self.show_changes(parent, audio, Path(path))
+        d.open(self, None, hecho)
+
+    @staticmethod
+    def diff_markup(antes, ahora):
+        """Marcado de Pango con las palabras quitadas (tachadas, en rojo) y las nuevas (en verde)."""
+        import difflib
+        a, b = antes.split(), ahora.split()
+        esc = lambda ws: GLib.markup_escape_text(" ".join(ws))  # noqa: E731
+        izq, der = [], []
+        for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+            if op == "equal":
+                izq.append(esc(a[i1:i2]))
+                der.append(esc(b[j1:j2]))
+                continue
+            if i2 > i1:
+                izq.append(f'<span foreground="#ff8a80" strikethrough="true">{esc(a[i1:i2])}</span>')
+            if j2 > j1:
+                der.append(f'<span foreground="#7ee787" weight="bold">{esc(b[j1:j2])}</span>')
+        return " ".join(izq), " ".join(der)
+
+    def show_changes(self, parent, audio, nuevo):
+        try:
+            mapa, _jobs, cambios = md2audio.comparar_con(audio, nuevo)
+        except (ValueError, OSError) as e:
+            self.toast(f"No se pudo comparar: {e}")
+            return
+        if not cambios:
+            self.toast(f"«{nuevo.name}» no cambia nada de lo que se oye en el audio")
+            return
+        frs, rate = mapa["fragmentos"], mapa["rate"]
+        voz = mapa["voz"] if mapa["voz"] in self.rates else self.current_voice()
+        n_nuevos = sum(c["j2"] - c["j1"] for c in cambios)
+        dlg = Adw.Dialog(title=f"Cambios de «{nuevo.name}»", content_width=820, content_height=660)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=6, margin_bottom=12,
+                      margin_start=12, margin_end=12)
+        tipos = {}
+        for c in cambios:
+            tipos[c["tipo"]] = tipos.get(c["tipo"], 0) + 1
+        resumen = ", ".join(f"{n} {t}{'s' if n > 1 and t != 'otra voz' else ''}" for t, n in tipos.items())
+        box.append(label(f"{len(cambios)} cambio{'s' if len(cambios) > 1 else ''} ({resumen}). Se generan "
+                         f"{n_nuevos} trozo{'s' if n_nuevos != 1 else ''} con la misma voz y ajustes; el resto del "
+                         "audio se queda como está. En rojo y tachado lo que había; en verde, lo nuevo.",
+                         "desc", xalign=0, wrap=True))
+        lb = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        lb.add_css_class("boxed-list")
+        for c in cambios:
+            antes, ahora = " ".join(c["antes"]), " ".join(c["ahora"])
+            m_antes, m_ahora = self.diff_markup(antes, ahora)
+            fila = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=10, margin_bottom=10,
+                           margin_start=12, margin_end=12)
+            cab = Gtk.Box(spacing=8)
+            i1 = c["i1"]
+            pos = frs[i1]["inicio"] if i1 < len(frs) else frs[-1]["fin"]
+            donde = f"trozo {i1 + 1}" if c["tipo"] != "añadido" else (
+                f"antes del trozo {i1 + 1}" if i1 < len(frs) else "al final")
+            cab.append(label(f"{c['tipo'].capitalize()} · {donde} · {md2audio._mmss(pos / rate)}", "job-title",
+                             xalign=0, hexpand=True))
+            if c["antes"]:
+                ini, fin = frs[i1]["inicio"], frs[c["i2"] - 1]["fin"]
+                oir = Gtk.Button(icon_name="media-playback-start-symbolic", tooltip_text="Escuchar cómo está ahora")
+                oir.add_css_class("flat")
+                oir.connect("clicked", lambda _b, ini=ini, fin=fin: (self.stop(), self.play(
+                    "", voice=voz, status="Escuchando el trozo", source=audio, rate=rate,
+                    clip=(ini / rate, (fin - ini) / rate))))
+                cab.append(oir)
+            fila.append(cab)
+            if c["tipo"] == "otra voz":
+                quien = lambda vs: ", ".join(dict.fromkeys(self.frag_voice(v) for v in vs))  # noqa: E731
+                fila.append(label(f"Lo decía {quien(c['voces_antes'])}; ahora lo dice {quien(c['voces'])} "
+                                  "(cambiaste el reparto después de exportar)", "job-sub", xalign=0, wrap=True))
+                fila.append(Gtk.Label(label=GLib.markup_escape_text(ahora), use_markup=True, wrap=True, xalign=0,
+                                      selectable=True))
+                lb.append(Gtk.ListBoxRow(child=fila, activatable=False))
+                continue
+            for titulo, markup, ok in (("ANTES", m_antes, bool(c["antes"])), ("AHORA", m_ahora, bool(c["ahora"]))):
+                if not ok:
+                    continue
+                linea = Gtk.Box(spacing=10)
+                linea.append(label(titulo, "field-label", xalign=0, valign=Gtk.Align.START, width_chars=6))
+                linea.append(Gtk.Label(label=markup, use_markup=True, wrap=True, xalign=0, hexpand=True,
+                                       selectable=True, natural_wrap_mode=Gtk.NaturalWrapMode.WORD))
+                fila.append(linea)
+            lb.append(Gtk.ListBoxRow(child=fila, activatable=False))
+        box.append(Gtk.ScrolledWindow(child=lb, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER))
+        botones = Gtk.Box(spacing=8, halign=Gtk.Align.END)
+        cancelar = Gtk.Button(label="Cancelar")
+        cancelar.connect("clicked", lambda _b: dlg.close())
+        ir = Gtk.Button(label=f"Rehacer {n_nuevos} trozo{'s' if n_nuevos != 1 else ''}" if n_nuevos
+                        else "Quitar del audio")
+        ir.add_css_class("suggested-action")
+
+        def aplicar(_b):
+            try:
+                cola.add_actualizar(audio, nuevo)
+            except (OSError, ValueError) as e:
+                self.toast(str(e))
+                return
+            dlg.close()
+            parent.close()
+            self.stack.set_visible_child_name("cola")
+            self.toast(f"Aplicando los cambios de «{nuevo.name}» en la cola")
+            self.refresh_queue()
+        ir.connect("clicked", aplicar)
+        botones.append(cancelar)
+        botones.append(ir)
+        box.append(botones)
+        view.set_content(box)
+        dlg.set_child(view)
+        dlg.connect("closed", lambda *_: self.stop())
+        dlg.present(parent)
 
     def ask_redo(self, parent, audio, n, texto):
         dlg = Adw.AlertDialog(heading=f"Rehacer el trozo {n}",
@@ -2137,6 +2593,9 @@ class JuglarWindow(Adw.ApplicationWindow):
     def on_drop(self, _target, gfile, _x, _y):
         self.dropzone.remove_css_class("hover")
         path = gfile.get_path()
+        if path and Path(path).suffix.lower() in TEXT_EXTS and self.stack.get_visible_child_name() == "musica":
+            self.load_lyrics(path)
+            return True
         if path and Path(path).is_dir():
             self.export_book(path)
             return True
@@ -2186,6 +2645,7 @@ class JuglarWindow(Adw.ApplicationWindow):
                 row = self.rows[job["id"]] = JobRow(self, job["id"])
                 self.job_list.append(row.row)
             row.update(job, paused)
+        self.refresh_songs(jobs)
         active = [j for j in jobs if j["status"] in ("queued", "running")]
         running = next((j for j in jobs if j["status"] == "running"), None)
         self.queue_stack.set_visible_child_name("lista" if jobs else "vacio")

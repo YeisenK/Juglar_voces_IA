@@ -349,6 +349,16 @@ Si al escuchar un capítulo exportado una frase salió mal (una palabra mal dich
 3. Pulsa **Rehacer…**. Puedes **corregir el texto** antes (por ejemplo, escribir «Édguard» para que pronuncie bien «Edward»).
 4. Se añade a la cola: se genera solo ese trozo, **con la misma voz y los mismos ajustes** con que se exportó, se revisa con Whisper si está activado y se cambia en el audio. Lo demás no se toca, y los capítulos (`m4b`) se recolocan solos si el trozo dura más o menos.
 
+### Corregiste el texto: cargar el .md nuevo
+
+Si cambiaste varias cosas en el capítulo (frases corregidas, un párrafo nuevo, otro que sobraba), no hace falta ir trozo por trozo:
+
+1. En la ventana de **Rehacer un trozo**, pulsa **Cargar .md corregido…** y elige el archivo. Si el `.md` con que se exportó cambió después, también aparece el botón **Usar «capítulo.md»**.
+2. Juglar trocea el texto nuevo igual que al exportar y lo compara con lo que se oye en el audio. Te enseña cada cambio con **lo que había** (en rojo y tachado) y **lo que hay ahora** (en verde), el minuto donde está y un ▶ para escuchar cómo suena ahora.
+3. Pulsa **Rehacer N trozos**: en la cola se generan solo los trozos que cambiaron o son nuevos, se quitan los que borraste y el resto del audio se queda igual. Los capítulos se recolocan solos.
+
+Ojo: si después de exportar cambiaste los ajustes del audiolibro (por ejemplo, el tamaño de los fragmentos o la voz de los diálogos), el texto se trocea distinto y saldrán más cambios de los que hiciste.
+
 Para que esto funcione, Juglar guarda junto a cada audio un archivo oculto con el mapa de sus fragmentos (`.Capítulo.mp3.juglar.json`). Si lo borras, el audio sigue funcionando, pero ya no se puede rehacer por trozos. Los audios exportados antes de esta función no lo tienen: vuelve a exportarlos una vez.
 
 Desde la terminal:
@@ -357,5 +367,50 @@ Desde la terminal:
 md2audio audio/Cid_C1_El_bravo.mp3 --fragmentos          # lista: número, minuto, voz y texto
 juglar-cola rehacer audio/Cid_C1_El_bravo.mp3 57          # rehace el fragmento 57
 juglar-cola rehacer audio/Cid_C1_El_bravo.mp3 57 --texto "El texto corregido."
+md2audio audio/Cid_C1_El_bravo.mp3 --comparar Cid_C1_El_bravo.md   # qué trozos cambian con el texto corregido
+juglar-cola rehacer audio/Cid_C1_El_bravo.mp3 --md Cid_C1_El_bravo.md   # rehace solo esos
 ```
+
+También en **Exportar** está el botón **Historial**: todos los audios que has exportado, mientras sigan en la computadora (los que borres desaparecen de la lista), con cuántos trozos se les han rehecho, para escucharlos o volver a abrir sus trozos.
+
+## 8. Música: canciones con tu letra
+
+La pestaña **Música** convierte en canción una letra que ya tengas escrita, con la música que describas con tus palabras. Usa [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5), un modelo libre que corre en tu tarjeta gráfica.
+
+1. **Letra**: escríbela o pégala, o pulsa **Abrir letra…** (o arrastra un `.txt`/`.md` a la ventana). Si el archivo empieza con `# Título`, ese es el título de la canción. Sin letra, sale instrumental.
+2. **Cómo suena**: descríbelo en lenguaje natural: estilo, instrumentos, tipo de voz, tempo y ambiente. Por ejemplo: *«balada folk con guitarra española y voz masculina cálida, lenta e íntima»*. El botón **Ejemplos** rellena algunas para empezar.
+3. **Duración** en segundos (0 = que la elija el modelo según la letra; hasta 8 minutos), **idioma** de la voz y **semilla** (−1 = al azar).
+4. **Generar canción**: va a la misma cola que los audios (así nunca coincide con Qwen en la tarjeta) y aparece a la derecha cuando está. Se guarda en `~/Música/Juglar`.
+
+Marca las partes de la letra entre corchetes, en español o en inglés:
+
+```text
+# El juglar
+
+[Estrofa]
+Por el camino de piedra
+vuelve el juglar al anochecer
+
+[Estribillo]
+Canta, juglar, canta
+que la noche es larga ya
+
+[Puente]
+…
+```
+
+Valen `[Estrofa]`, `[Estribillo]` (o `[Coro]`), `[Preestribillo]`, `[Puente]`, `[Intro]`, `[Final]`, `[Solo]`, `[Interludio]` e `[Instrumental]`, y también sus nombres en inglés (`[Verse]`, `[Chorus]`, `[Bridge]`…). Los encabezados de Markdown (`## Estribillo`) cuentan igual.
+
+En la lista de canciones, ↻ **carga la letra, la descripción y la semilla** de una canción: si generas sin cambiar nada sale la misma; cambia la descripción o pon la semilla al azar para probar variaciones. Cada canción guarda sus datos en un archivo oculto a su lado (`.Canción.mp3.musica.json`).
+
+La primera canción tarda más: descarga el modelo (unos 10 GB). Después, una canción de 2 minutos tarda alrededor de un minuto en una tarjeta de 8 GB.
+
+Desde la terminal:
+
+```bash
+juglar-cola musica --letra "El juglar.md" -d "balada folk con guitarra y voz masculina" -t 120
+juglar-cola musica -d "música medieval de taberna, laúd y flauta" -t 60 -o ~/Música/Juglar/Taberna.mp3   # instrumental
+```
+
+La música es opcional: `install.sh` pregunta si la instalas (o `CON_MUSICA=1 ./install.sh`).
 
