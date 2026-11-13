@@ -25,6 +25,10 @@ Los juglares iban de pueblo en pueblo contando historias y dando voz a cada pers
 |---|---|
 | ![Voces](docs/captura-voces.png) | ![Exportar](docs/captura-cola.png) |
 
+| Música: canciones con tu letra (ACE-Step) | Rehacer desde el `.md` corregido |
+|---|---|
+| ![Música](docs/captura-musica.png) | ![Cambios del texto corregido](docs/captura-cambios.png) |
+
 ## Requisitos
 
 - **Linux** con GTK 4 y libadwaita 1.7 o posterior (probado en Fedora 43 con GNOME).
