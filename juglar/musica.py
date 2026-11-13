@@ -16,7 +16,8 @@ ETIQUETAS = {
     "estrofa": "Verse", "verso": "Verse", "estribillo": "Chorus", "coro": "Chorus", "puente": "Bridge",
     "introducción": "Intro", "introduccion": "Intro", "intro": "Intro", "final": "Outro", "cierre": "Outro",
     "outro": "Outro", "preestribillo": "Pre-Chorus", "pre-estribillo": "Pre-Chorus", "instrumental": "Instrumental",
-    "solo": "Solo", "interludio": "Interlude",
+    "solo": "Solo", "interludio": "Interlude", "despedida": "Outro", "coda": "Outro", "verse": "Verse",
+    "chorus": "Chorus", "bridge": "Bridge", "pre-chorus": "Pre-Chorus", "interlude": "Interlude",
 }
 
 EJEMPLOS = [
@@ -38,14 +39,39 @@ def meta_de(audio):
     return Path(audio).with_name(f".{Path(audio).name}.musica.json")
 
 
-def normalizar_letra(texto):
-    """[Estribillo] → [Chorus], [Estrofa 2] → [Verse 2]…; el resto de la letra no se toca."""
+def _etiqueta(nombre):
+    """«Estrofa 2» → «Verse 2», «Estribillo final» → «Chorus», «Despedida» → «Outro»; desconocida → tal cual."""
+    palabras = nombre.strip().split()
+    if not palabras:
+        return nombre
+    base = ETIQUETAS.get(palabras[0].lower()) or ETIQUETAS.get(nombre.strip().lower())
+    if not base:
+        return nombre.strip()
+    num = next((p for p in palabras[1:] if p.isdigit()), "")
+    return f"{base} {num}".strip()
+
+
+def separar_letra(texto):
+    """Prepara la letra para ACE-Step: las etiquetas se quedan solo con su nombre en inglés
+    («[Estrofa 2: coro de niñas, entra la flauta]» → «[Verse 2]»), porque si llevan instrucciones el modelo
+    las canta. → (letra, notas) con notas = ["Estrofa 2: coro de niñas, entra la flauta", …] para la descripción."""
+    notas = []
+
     def cambiar(m):
-        nombre, resto = m.group(1).strip(), (m.group(2) or "").strip()
-        if resto[:1].isdigit():
-            resto = " " + resto
-        return f"[{ETIQUETAS.get(nombre.lower(), nombre)}{resto}]"
-    return re.sub(r"\[\s*([^\]\d:]+?)\s*((?:\s*\d+)?(?:\s*:[^\]]*)?)\]", cambiar, texto)
+        dentro = m.group(1)
+        nombre, _, nota = dentro.partition(":")
+        if not nota:  # también «[Estribillo - suave]» o «[Estribillo (todos)]»
+            if mm := re.match(r"\s*([^\-–—(]+?)\s*(?:[-–—]|\()\s*(.+?)\)?\s*$", dentro):
+                nombre, nota = mm.group(1), mm.group(2)
+        if nota.strip():
+            notas.append(f"{nombre.strip()}: {nota.strip()}")
+        return f"[{_etiqueta(nombre)}]"
+    return re.sub(r"\[([^\]\n]+)\]", cambiar, texto), notas
+
+
+def normalizar_letra(texto):
+    """Solo la letra de separar_letra (etiquetas en inglés y sin instrucciones)."""
+    return separar_letra(texto)[0]
 
 
 # Cabecera de un .md de canción: «Clave: valor» entre el título y la letra (ver docs/GUIA.md, sección 8).

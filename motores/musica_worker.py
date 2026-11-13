@@ -120,7 +120,7 @@ def main():
     if dur > 0:
         dur = max(10.0, min(dur, float(tope or 600)))
     params = GenerationParams(
-        task_type="text2music", caption=(pet.get("descripcion") or "")[:2000],  # el compositor (LM) la resume
+        task_type="text2music", caption=(pet.get("descripcion") or "")[:4000],  # el compositor (LM) la resume
         lyrics="[Instrumental]" if instrumental else letra[:4096], instrumental=instrumental,
         vocal_language=pet.get("idioma") or "es", duration=dur if dur > 0 else -1.0,
         bpm=pet.get("bpm") or None, keyscale=pet.get("clave") or pet.get("tonalidad") or "",

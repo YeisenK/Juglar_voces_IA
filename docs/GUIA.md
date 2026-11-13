@@ -473,7 +473,7 @@ Etiquetas de la letra:
 
 Cada clave va a su campo de la pestaña; para generar, Juglar junta el estilo y los detalles («Voz: …. Instrumentos: …») en una sola descripción. No importa que sea larga: el compositor de ACE-Step la lee entera y la resume antes de componer.
 
-Dentro de una etiqueta puedes dar indicaciones para esa parte: `[Estribillo: una niña sola; el coro responde]`.
+Dentro de una etiqueta puedes dar indicaciones para esa parte: `[Estribillo: una niña sola; el coro responde]` (también `[Estribillo - suave]` o `[Estribillo (todos)]`). **No se cantan**: antes de generar, Juglar deja la etiqueta solo con su nombre (`[Chorus]`) y pasa las indicaciones a la descripción como «arreglo por partes», que el compositor sí lee. `[Estribillo final]` cuenta como estribillo y `[Despedida]` como final.
 
 Los encabezados de Markdown valen igual que los corchetes: `## Estribillo` o una línea `**Estribillo**`. 
 

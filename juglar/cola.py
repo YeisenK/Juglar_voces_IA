@@ -188,7 +188,9 @@ def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es
     if not rutas.ACESTEP_PY.exists():
         raise RuntimeError("ACE-Step no está instalado (vuelve a ejecutar install.sh y acepta la música)")
     import musica
-    letra = musica.normalizar_letra(letra or "")
+    letra, notas = musica.separar_letra(letra or "")
+    if notas:  # las indicaciones de cada parte van a la descripción, no a la letra (si no, se cantan)
+        descripcion = f"{descripcion.rstrip('. ')}. Arreglo por partes: " + "; ".join(notas)
     out = Path(salida)
     if not overwrite:
         out = free_name(out)
