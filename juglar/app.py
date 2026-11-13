@@ -2474,6 +2474,21 @@ class JuglarWindow(Adw.ApplicationWindow):
                               tooltip_text=f"{fuente}\nCambió después de exportar el audio")
             usar.connect("clicked", lambda _b: self.show_changes(dlg, audio, fuente))
             nuevo_box.append(usar)
+        if md2audio.copia_anterior(audio).exists():
+            atras = Gtk.Button(label="Deshacer el último cambio", valign=Gtk.Align.CENTER,
+                               tooltip_text="Volver al audio de antes del último trozo rehecho "
+                                            "(pulsando otra vez, vuelves al nuevo)")
+
+            def deshacer(_b):
+                try:
+                    md2audio.deshacer(audio)
+                except (ValueError, OSError) as e:
+                    self.toast(str(e))
+                    return
+                dlg.close()
+                self.toast(f"«{audio.name}»: vuelto a la versión anterior")
+            atras.connect("clicked", deshacer)
+            nuevo_box.append(atras)
         cargar = Gtk.Button(label="Cargar .md corregido…", valign=Gtk.Align.CENTER, margin_end=10)
         cargar.add_css_class("suggested-action")
         cargar.connect("clicked", lambda _b: self.pick_corrected(dlg, audio, fuente))

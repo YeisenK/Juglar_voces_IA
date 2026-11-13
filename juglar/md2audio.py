@@ -813,6 +813,8 @@ def main():
     ap.add_argument("--texto", help="con --rehacer: texto nuevo para ese fragmento (por defecto, el mismo)")
     ap.add_argument("--comparar", metavar="MD",
                     help="con un audio exportado como entrada: qué trozos cambian con este texto corregido")
+    ap.add_argument("--deshacer", action="store_true",
+                    help="con un audio exportado como entrada: vuelve a la versión de antes del último trozo rehecho")
     ap.add_argument("--actualizar", metavar="MD",
                     help="con un audio exportado como entrada: rehace solo los trozos que cambiaron en este texto")
     ap.add_argument("--cpu", action="store_true", help="no usar la GPU aunque esté disponible")
@@ -829,6 +831,15 @@ def main():
         return rehacer_fragmento(a)
     if a.actualizar:
         return actualizar_desde(a)
+    if a.deshacer:
+        try:
+            deshacer(a.input)
+        except (ValueError, OSError) as e:
+            emit(a.json, type="error", message=str(e))
+            sys.exit(1)
+        print(f"Vuelto a la versión anterior de {Path(a.input).name} (otra vez --deshacer para volver a la nueva)",
+              file=sys.stderr)
+        return
     if a.comparar:
         try:
             _mapa, _jobs, cambios = comparar_con(a.input, a.comparar)
@@ -1027,6 +1038,35 @@ def guardar_mapa(audio, mapa):
         mapa_de(audio).write_text(json.dumps(mapa, ensure_ascii=False), encoding="utf-8")
 
 
+def copia_anterior(audio):
+    """Dónde se guarda la versión anterior de un audio antes de rehacerle trozos (una sola, la última)."""
+    audio = Path(audio)
+    return audio.with_name(f".{audio.stem}.anterior{audio.suffix}")
+
+
+def guardar_anterior(audio):
+    """Copia el audio y su mapa antes de cambiarlos, para poder deshacer (md2audio AUDIO --deshacer)."""
+    audio = Path(audio)
+    shutil.copy2(audio, copia_anterior(audio))
+    shutil.copy2(mapa_de(audio), mapa_de(copia_anterior(audio)))
+
+
+def deshacer(audio):
+    """Vuelve a la versión anterior del audio (la que había antes del último trozo rehecho). Se puede rehacer
+    lo deshecho: las dos versiones se intercambian."""
+    audio = Path(audio)
+    ant = copia_anterior(audio)
+    if not ant.exists() or not mapa_de(ant).exists():
+        raise ValueError("No hay una versión anterior de este audio")
+    tmp, tmp_m = audio.with_name(f".{audio.name}.cambio"), audio.with_name(f".{audio.name}.cambio.json")
+    os.replace(audio, tmp)
+    os.replace(mapa_de(audio), tmp_m)
+    os.replace(ant, audio)
+    os.replace(mapa_de(ant), mapa_de(audio))
+    os.replace(tmp, ant)
+    os.replace(tmp_m, mapa_de(ant))
+
+
 def _mmss(seg):
     seg = int(seg)
     return f"{seg // 3600}:{seg % 3600 // 60:02d}:{seg % 60:02d}" if seg >= 3600 else f"{seg // 60}:{seg % 60:02d}"
@@ -1108,6 +1148,7 @@ def rehacer_fragmento(a):
                         "-ac", "1", "-i", "-", *fmt_codec(audio), str(tmp_audio)], input=nuevo, check=True)
         tmp_audio = poner_capitulos(tmp_audio, mapa["capitulos"], mapa["muestras"], rate,
                                     mapa.get("titulo", audio.stem), tmpdir)
+        guardar_anterior(audio)
         shutil.move(str(tmp_audio), audio)
         guardar_mapa(audio, mapa)
         emit(a.json, type="done", output=str(audio), duration=mapa["muestras"] / rate,
@@ -1215,12 +1256,13 @@ def actualizar_desde(a):
             if c is None:
                 break
             i1, i2, j1, j2 = c["i1"], c["i2"], c["j1"], c["j2"]
-            if c["tipo"] == "cambiado":
+            # según la forma del cambio, no su nombre («otra voz» también es sustituir)
+            if i2 > i1 and j2 > j1:
                 copiar(frs[i1]["inicio"])                      # el silencio de antes se queda
                 for j in range(j1, j2):
                     poner(j, despues=jobs[j][2] if j < j2 - 1 else 0.0)
                 cursor = frs[i2 - 1]["fin"]                    # el silencio de después, también
-            elif c["tipo"] == "añadido":
+            elif i1 == i2:  # añadido
                 if i1 < len(frs):
                     copiar(frs[i1]["inicio"])
                     for j in range(j1, j2):
@@ -1246,6 +1288,7 @@ def actualizar_desde(a):
                         "-ac", "1", "-i", "-", *fmt_codec(audio), str(tmp_audio)], input=bytes(out), check=True)
         tmp_audio = poner_capitulos(tmp_audio, mapa["capitulos"], mapa["muestras"], rate,
                                     mapa.get("titulo", audio.stem), tmpdir)
+        guardar_anterior(audio)
         shutil.move(str(tmp_audio), audio)
         guardar_mapa(audio, mapa)
         emit(a.json, type="done", output=str(audio), duration=mapa["muestras"] / rate,

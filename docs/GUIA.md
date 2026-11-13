@@ -359,6 +359,10 @@ Si cambiaste varias cosas en el capítulo (frases corregidas, un párrafo nuevo,
 
 Ojo: si después de exportar cambiaste los ajustes del audiolibro (por ejemplo, el tamaño de los fragmentos o la voz de los diálogos), el texto se trocea distinto y saldrán más cambios de los que hiciste.
 
+**Deshacer**: antes de cambiar un audio, Juglar guarda la versión anterior (oculta, junto al audio). Si no te gusta cómo quedó, en la ventana de **Rehacer un trozo** pulsa **Deshacer el último cambio** (pulsándolo otra vez vuelves a la versión nueva), o desde la terminal `md2audio AUDIO --deshacer`. Solo se guarda la última versión.
+
+Si cambias quién dice un diálogo (por ejemplo, `—@pastor_viejo` por `—@hombre_grunon`), al cargar el `.md` esos trozos salen como **otra voz** y se rehacen con la voz nueva. Lo mismo pasa si cambias el reparto en **Voces** después de exportar.
+
 Para que esto funcione, Juglar guarda junto a cada audio un archivo oculto con el mapa de sus fragmentos (`.Capítulo.mp3.juglar.json`). Si lo borras, el audio sigue funcionando, pero ya no se puede rehacer por trozos. Los audios exportados antes de esta función no lo tienen: vuelve a exportarlos una vez.
 
 Desde la terminal:
