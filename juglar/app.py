@@ -1180,31 +1180,55 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.refresh_songs(force=True)
         self.toast(f"«{Path(c['audio']).name}» a la papelera")
 
-    def refresh_songs(self, jobs=None, force=False):
+    def refresh_songs(self, jobs=None, force=False, paused=None):
         if not hasattr(self, "song_list"):
             return
-        jobs = [j for j in (jobs if jobs is not None else cola.snapshot()["jobs"])
-                if j.get("tipo") == "musica" and j["status"] in ("queued", "running", "failed")]
+        if jobs is None or paused is None:
+            q = cola.snapshot()
+            jobs, paused = (jobs if jobs is not None else q["jobs"]), q["paused"]
+        jobs = [j for j in jobs if j.get("tipo") == "musica" and j["status"] in ("queued", "running", "failed")]
         songs = musica.canciones()
-        sig = (tuple((j["id"], j["status"], j["done"], j.get("fase")) for j in jobs),
+        sig = (paused, tuple((j["id"], j["status"], j["done"], j.get("fase"), j.get("cancel")) for j in jobs),
                tuple((s["audio"], s["mtime"]) for s in songs))
         if sig == self.music_sig and not force:
             return
         self.music_sig = sig
         while (child := self.song_list.get_first_child()) is not None:
             self.song_list.remove(child)
+
+        def boton(icon, tip, cb):
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip, valign=Gtk.Align.CENTER)
+            b.add_css_class("flat")
+            b.connect("clicked", lambda *_: (cb(), self.refresh_queue()))
+            return b
         for j in jobs:
             row = Adw.ActionRow(title=j["title"].lstrip("♪ "), use_markup=False)
             if j["status"] == "running":
-                row.set_subtitle(f"{j['done']} % · {j.get('fase') or 'Generando…'}")
-                spin = Adw.Spinner(valign=Gtk.Align.CENTER)
-                row.add_prefix(spin)
+                if j.get("cancel"):
+                    row.set_subtitle("Deteniendo…")
+                elif paused:
+                    row.set_subtitle(f"En pausa · {j['done']} %")
+                else:
+                    row.set_subtitle(f"{j['done']} % · {j.get('fase') or 'Generando…'}")
+                row.add_prefix(Gtk.Image(icon_name="media-playback-pause-symbolic") if paused
+                               else Adw.Spinner(valign=Gtk.Align.CENTER))
             elif j["status"] == "queued":
-                row.set_subtitle("En cola")
+                row.set_subtitle("En cola" + (" (la cola está en pausa)" if paused else ""))
                 row.add_prefix(Gtk.Image(icon_name="content-loading-symbolic"))
             else:
                 row.set_subtitle(j.get("message") or "No se pudo generar")
                 row.add_prefix(Gtk.Image(icon_name="dialog-warning-symbolic"))
+            if j["status"] == "running" and not j.get("cancel"):
+                row.add_suffix(boton("media-playback-start-symbolic", "Reanudar", lambda: cola.set_paused(False))
+                               if paused else
+                               boton("media-playback-pause-symbolic",
+                                     "Pausar (se congela donde va; la cola entera espera)",
+                                     lambda: cola.set_paused(True)))
+            if j["status"] in ("running", "queued") and not j.get("cancel"):
+                row.add_suffix(boton("process-stop-symbolic", "Detener y quitar esta canción",
+                                     lambda i=j["id"]: cola.cancel_job(i)))
+            if j["status"] == "failed":
+                row.add_suffix(boton("edit-delete-symbolic", "Quitar de la lista", lambda i=j["id"]: cola.remove_job(i)))
             self.song_list.append(row)
         for c in songs:
             fecha = GLib.DateTime.new_from_unix_local(int(c["mtime"])).format("%d/%m %H:%M")
@@ -2755,7 +2779,7 @@ class JuglarWindow(Adw.ApplicationWindow):
                 row = self.rows[job["id"]] = JobRow(self, job["id"])
                 self.job_list.append(row.row)
             row.update(job, paused)
-        self.refresh_songs(jobs)
+        self.refresh_songs(jobs, paused=paused)
         active = [j for j in jobs if j["status"] in ("queued", "running")]
         running = next((j for j in jobs if j["status"] == "running"), None)
         self.queue_stack.set_visible_child_name("lista" if jobs else "vacio")

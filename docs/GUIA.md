@@ -402,6 +402,8 @@ Botones de arriba:
 | **Añadir .md a la cola…** | Elige uno o varios `.md` de canción y se generan directamente, sin abrirlos. Los que no digan cómo suenan no se añaden y te dice por qué. |
 | **Nueva** | Vacía el formulario. |
 
+Mientras se genera, la canción aparece arriba en la lista con su progreso y dos botones: **⏸ Pausar** (se congela donde va y la cola entera espera; ▶ la reanuda) y **⏹ Detener** (la cancela y la quita; las que están en cola también se pueden quitar así). Lo mismo se puede hacer desde la pestaña **Exportar**.
+
 En la lista de canciones de la derecha: ▶ escuchar, ↻ **cargar su letra, estilo y semilla** (si generas sin cambiar nada, sale la misma; cambia el estilo o pon la semilla al azar para variaciones), abrir la carpeta y mandar a la papelera. Cada canción guarda sus datos en un archivo oculto a su lado (`.Canción.mp3.musica.json`).
 
 La primera canción tarda más porque descarga el modelo (unos 10 GB). Después, una canción de 30-40 segundos tarda unos 20-25 segundos en una tarjeta de 8 GB.
