@@ -48,15 +48,20 @@ def normalizar_letra(texto):
     return re.sub(r"\[\s*([^\]\d:]+?)\s*((?:\s*\d+)?(?:\s*:[^\]]*)?)\]", cambiar, texto)
 
 
-# Cabecera de un .md de canción: «Clave: valor» entre el título y la letra (ver docs/GUIA.md, sección 8)
+# Cabecera de un .md de canción: «Clave: valor» entre el título y la letra (ver docs/GUIA.md, sección 8).
+# Cada clave va a su campo; las de sonido (estilo, voz, instrumentos…) forman juntas la descripción.
+CAMPOS = ("estilo", "voz", "instrumentos", "ambiente", "tempo", "tonalidad")   # los de «cómo suena», en orden
 CLAVES = {
-    "estilo": "descripcion", "descripcion": "descripcion", "como suena": "descripcion", "musica": "descripcion",
-    "genero": "extra", "voz": "extra", "voces": "extra", "instrumentos": "extra", "ambiente": "extra",
-    "ritmo": "extra", "duracion": "duracion", "idioma": "idioma", "semilla": "semilla", "tempo": "bpm",
-    "bpm": "bpm", "tonalidad": "tonalidad", "tono": "tonalidad", "instrumental": "instrumental",
-    "titulo": "titulo",
+    "estilo": "estilo", "descripcion": "estilo", "como suena": "estilo", "musica": "estilo", "genero": "estilo",
+    "voz": "voz", "voces": "voz", "instrumentos": "instrumentos", "instrumentacion": "instrumentos",
+    "ambiente": "ambiente", "atmosfera": "ambiente", "tempo": "tempo", "ritmo": "tempo", "bpm": "tempo",
+    "compas": "tempo", "tonalidad": "tonalidad", "tono": "tonalidad", "duracion": "duracion",
+    "idioma": "idioma", "semilla": "semilla", "instrumental": "instrumental", "titulo": "titulo",
 }
+NOMBRES = {"estilo": "Estilo", "voz": "Voz", "instrumentos": "Instrumentos", "ambiente": "Ambiente",
+           "tempo": "Tempo", "tonalidad": "Tonalidad"}
 SI = ("si", "sí", "s", "yes", "true", "1")
+NOTAS = {"do": "C", "re": "D", "mi": "E", "fa": "F", "sol": "G", "la": "A", "si": "B"}
 
 
 def _sin_tildes(t):
@@ -87,17 +92,38 @@ def _idioma(v):
     raise ValueError(f"Idioma desconocido: «{v}» (usa {', '.join(n for _c, n in IDIOMAS)})")
 
 
-NOTAS = {"do": "C", "re": "D", "mi": "E", "fa": "F", "sol": "G", "la": "A", "si": "B"}
+def bpm_de(tempo):
+    """«lento, 72 BPM, compás de 3/4» → 72; «120» → 120; si no hay un número claro, None."""
+    t = _sin_tildes(tempo or "")
+    m = re.search(r"(\d{2,3})\s*(?:bpm|pulsos|ppm|negras)", t) or re.fullmatch(r"\s*(\d{2,3})\s*", t)
+    return int(m[1]) if m and 30 <= int(m[1]) <= 300 else None
 
 
-def _tonalidad(v):
-    """«Re mayor» → «D Major», «la menor» → «A minor», «fa sostenido menor» → «F# minor»; lo demás, tal cual."""
-    t = _sin_tildes(v)
-    m = re.fullmatch(r"(do|re|mi|fa|sol|la|si)\s*(#|sostenido|b|bemol)?\s*(mayor|menor)?", t)
-    if not m:
-        return v.strip()
-    nota = NOTAS[m[1]] + {"#": "#", "sostenido": "#", "b": "b", "bemol": "b"}.get(m[2] or "", "")
-    return f"{nota} {'minor' if m[3] == 'menor' else 'Major'}"
+def compas_de(tempo):
+    """«compás de 3/4» → «3»; «6/8» → «6» (lo que entiende ACE-Step: 2, 3, 4 o 6)."""
+    m = re.search(r"\b([2346])\s*/\s*(?:4|8)\b", tempo or "")
+    return m[1] if m else ""
+
+
+def tonalidad_de(texto):
+    """Busca la tonalidad en un texto libre: «menor (re menor), cadencias suaves» → «D minor»,
+    «sol mayor» → «G Major», «Am» o «C Major» tal cual. Los modos («dórico en mi») no tienen equivalente: ""."""
+    t = _sin_tildes(texto or "")
+    m = re.search(r"\b(do|re|mi|fa|sol|la|si)\s*(#|sostenido|bemol|b)?\s+(mayor|menor)\b", t)
+    if m:
+        nota = NOTAS[m[1]] + {"#": "#", "sostenido": "#", "b": "b", "bemol": "b"}.get(m[2] or "", "")
+        return f"{nota} {'minor' if m[3] == 'menor' else 'Major'}"
+    m = re.fullmatch(r"\s*([A-Ga-g][#b]?)\s*(major|minor|m)?\s*", texto or "")
+    if m:
+        return f"{m[1].upper()} {'minor' if (m[2] or '').lower() in ('minor', 'm') else 'Major'}"
+    return ""
+
+
+def descripcion_de(c):
+    """La descripción que recibe ACE-Step: el estilo y, detrás, cada detalle con su nombre."""
+    partes = [c.get("estilo", "").strip().rstrip(".")]
+    partes += [f"{NOMBRES[k]}: {c[k].strip().rstrip('.')}" for k in CAMPOS[1:] if (c.get(k) or "").strip()]
+    return ". ".join(p for p in partes if p)
 
 
 def _letra_md(texto):
@@ -107,12 +133,31 @@ def _letra_md(texto):
                   texto, flags=re.M)
 
 
+def nueva_cancion(titulo="Canción"):
+    return {"titulo": titulo, **{k: "" for k in CAMPOS}, "letra": "", "duracion": None, "idioma": None,
+            "semilla": None, "instrumental": False}
+
+
+def completar(c):
+    """Añade lo que se deduce de los campos: descripcion, bpm, tonalidad para ACE-Step (clave) y compás."""
+    c["descripcion"] = descripcion_de(c)
+    c["bpm"] = bpm_de(c.get("tempo"))
+    c["compas"] = compas_de(c.get("tempo"))
+    c["clave"] = tonalidad_de(c.get("tonalidad"))
+    return c
+
+
 def leer_cancion(path):
-    """Lee una canción de un .md/.txt → {titulo, descripcion, letra, duracion, idioma, semilla, bpm, tonalidad,
-    instrumental}. Formato (todo opcional salvo la letra o el estilo):
+    """Lee una canción de un .md/.txt → {titulo, estilo, voz, instrumentos, ambiente, tempo, tonalidad, letra,
+    duracion, idioma, semilla, instrumental} + lo deducido (descripcion, bpm, compas, clave). Formato:
 
         # El juglar
-        Estilo: balada folk con guitarra española y voz masculina cálida
+        Estilo: balada folk con guitarra española
+        Voz: masculina, cálida
+        Instrumentos: guitarra, flauta
+        Ambiente: taberna al anochecer
+        Tempo: lento, 72 BPM, compás de 3/4
+        Tonalidad: re menor
         Duración: 2:30
         Idioma: español
         Semilla: azar
@@ -123,22 +168,24 @@ def leer_cancion(path):
     La cabecera son líneas «Clave: valor» (o «> texto», que se suma al estilo) justo después del título; la
     primera línea que no lo es empieza la letra. También vale una cabecera entre «---» al principio."""
     path = Path(path)
-    texto = path.read_text(encoding="utf-8", errors="replace").lstrip("\ufeff").replace("\r\n", "\n").strip()
-    c = {"titulo": path.stem, "descripcion": "", "letra": "", "duracion": None, "idioma": None, "semilla": None,
-         "bpm": None, "tonalidad": "", "instrumental": False}
+    texto = path.read_text(encoding="utf-8", errors="replace").lstrip("﻿").replace("\r\n", "\n").strip()
+    c = nueva_cancion(path.stem)
     lineas = texto.split("\n")
-    i = 0
     if lineas and lineas[0].strip() == "---":  # cabecera al estilo YAML
         fin = next((k for k in range(1, len(lineas)) if lineas[k].strip() == "---"), None)
         if fin:
-            cab, lineas = lineas[1:fin], lineas[fin + 1:]
-            lineas = [x for x in cab if x.strip()] + [""] + lineas
+            lineas = [x for x in lineas[1:fin] if x.strip()] + [""] + lineas[fin + 1:]
+    i = 0
     while i < len(lineas) and not lineas[i].strip():
         i += 1
     if i < len(lineas) and (m := re.match(r"#\s+(.+)", lineas[i])):
         c["titulo"] = m[1].strip()
         i += 1
-    extra, cita = [], False
+
+    def sumar(campo, valor, sep="; "):
+        c[campo] = (c[campo] + sep + valor) if c[campo] else valor
+
+    cita = False
     while i < len(lineas):
         linea = lineas[i].strip()
         if not linea:
@@ -146,8 +193,7 @@ def leer_cancion(path):
             cita = False
             continue
         if linea.startswith(">"):
-            sep = " " if cita else ", "
-            c["descripcion"] = (c["descripcion"] + (sep if c["descripcion"] else "") + linea.lstrip("> ").strip())
+            sumar("estilo", linea.lstrip("> ").strip(), " " if cita else "; ")
             i += 1
             cita = True
             continue
@@ -157,31 +203,23 @@ def leer_cancion(path):
         if not clave:
             break  # aquí empieza la letra
         valor = m[2].strip()
-        if clave == "descripcion":
-            c["descripcion"] = (c["descripcion"] + (", " if c["descripcion"] else "") + valor).strip()
-        elif clave == "extra":
-            extra.append(f"{_sin_tildes(m[1]) if _sin_tildes(m[1]) not in ('voz', 'voces') else 'voz'} {valor}")
+        if clave in CAMPOS:
+            sumar(clave, valor)
         elif clave == "duracion":
             c["duracion"] = _duracion(valor)
         elif clave == "idioma":
             c["idioma"] = _idioma(valor)
         elif clave == "semilla":
             c["semilla"] = -1 if _sin_tildes(valor) in ("azar", "al azar", "aleatoria", "-1", "") else int(valor)
-        elif clave == "bpm":
-            c["bpm"] = int(re.sub(r"\D", "", valor) or 0) or None
-        elif clave == "tonalidad":
-            c["tonalidad"] = _tonalidad(valor)
         elif clave == "instrumental":
             c["instrumental"] = _sin_tildes(valor) in SI
         elif clave == "titulo":
             c["titulo"] = valor
         i += 1
-    if extra:
-        c["descripcion"] = ", ".join([x for x in [c["descripcion"]] if x] + extra)
     c["letra"] = _letra_md("\n".join(lineas[i:]).strip())
     if c["letra"].strip().lower() == "[instrumental]":
         c["letra"], c["instrumental"] = "", True
-    return c
+    return completar(c)
 
 
 def leer_letra(path):
@@ -193,18 +231,15 @@ def leer_letra(path):
 def escribir_cancion(c):
     """El texto .md de una canción (lo contrario de leer_cancion)."""
     cab = [f"# {c.get('titulo') or 'Canción'}", ""]
-    if c.get("descripcion"):
-        cab.append(f"Estilo: {c['descripcion']}")
+    if not any((c.get(k) or "").strip() for k in CAMPOS) and c.get("descripcion"):
+        cab.append(f"Estilo: {c['descripcion']}")  # canciones de antes, con todo junto
+    cab += [f"{NOMBRES[k]}: {c[k].strip()}" for k in CAMPOS if (c.get(k) or "").strip()]
     d = int(c.get("duracion") or 0)
     cab.append(f"Duración: {d // 60}:{d % 60:02d}" if d else "Duración: auto")
     nombre = dict(IDIOMAS).get(c.get("idioma") or "es", c.get("idioma"))
     cab.append(f"Idioma: {nombre.lower()}")
     s = c.get("semilla")
     cab.append(f"Semilla: {s}" if s is not None and int(s) >= 0 else "Semilla: azar")
-    if c.get("bpm"):
-        cab.append(f"Tempo: {c['bpm']}")
-    if c.get("tonalidad"):
-        cab.append(f"Tonalidad: {c['tonalidad']}")
     letra = (c.get("letra") or "").strip() or "[Instrumental]"
     return "\n".join(cab) + "\n\n" + letra + "\n"
 

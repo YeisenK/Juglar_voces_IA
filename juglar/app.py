@@ -910,7 +910,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         form.append(top)
 
         desc_head = Gtk.Box(spacing=8)
-        desc_head.append(label("CÓMO SUENA", "field-label", xalign=0, hexpand=True, valign=Gtk.Align.CENTER))
+        desc_head.append(label("CÓMO SUENA · ESTILO", "field-label", xalign=0, hexpand=True, valign=Gtk.Align.CENTER))
         ideas = Gio.Menu()
         for i, (nombre, _d) in enumerate(musica.EJEMPLOS):
             ideas.append(nombre, f"win.musica-ejemplo({i})")
@@ -936,6 +936,24 @@ class JuglarWindow(Adw.ApplicationWindow):
         dover.add_overlay(dhint)
         self.music_desc.get_buffer().connect("changed", lambda b: dhint.set_visible(b.get_char_count() == 0))
         form.append(dover)
+        # el resto de «cómo suena», cada cosa en su campo (como en el .md: «Voz:», «Tempo:»…)
+        grid = Gtk.Grid(column_spacing=10, row_spacing=6, margin_top=6)
+        self.music_fields = {}
+        ayudas = {"voz": "masculina, cálida · coro de niñas · femenina, dulce y susurrada",
+                  "instrumentos": "guitarra española, flauta, pandero",
+                  "ambiente": "taberna al anochecer, melancólico",
+                  "tempo": "lento, 72 BPM, compás de 3/4 (se usan los BPM y el compás)",
+                  "tonalidad": "re menor · sol mayor · Am (se usa si está clara)"}
+        for fila, k in enumerate(musica.CAMPOS[1:]):
+            e = Gtk.Entry(placeholder_text=ayudas[k], hexpand=True)
+            e.connect("changed", lambda w: w.set_tooltip_text(w.get_text() or None))
+            grid.attach(label(musica.NOMBRES[k].upper(), "field-label", xalign=0, valign=Gtk.Align.CENTER), 0, fila,
+                        1, 1)
+            grid.attach(e, 1, fila, 1, 1)
+            self.music_fields[k] = e
+        self.music_details = Gtk.Expander(child=grid, label="Voz, instrumentos, ambiente, tempo y tonalidad")
+        self.music_details.add_css_class("music-details")
+        form.append(self.music_details)
         lyr_head = Gtk.Box(spacing=8, margin_top=4)
         lyr_head.append(label("LETRA", "field-label", xalign=0, valign=Gtk.Align.CENTER))
         lyr_head.append(label("[Estrofa]  [Estribillo]  [Puente]  [Intro]  [Final] — o en inglés: [Verse], [Chorus]…",
@@ -1007,7 +1025,6 @@ class JuglarWindow(Adw.ApplicationWindow):
         root.append(side)
         self.music_side = side
         self.music_sig = None
-        self.music_extra = {}
         if not rutas.ACESTEP_PY.exists():
             self.music_go.set_sensitive(False)
             self.music_go.set_tooltip_text("ACE-Step no está instalado: ejecuta install.sh y acepta la música")
@@ -1035,12 +1052,30 @@ class JuglarWindow(Adw.ApplicationWindow):
     def music_form(self):
         """La canción tal como está en el formulario (el mismo diccionario que musica.leer_cancion)."""
         letra = self._tv_text(self.music_lyrics)
-        return {"titulo": self.music_title.get_text().strip() or (
-                    letra.splitlines()[0].strip("[]# ")[:40] if letra else "Instrumental"),
-                "descripcion": self._tv_text(self.music_desc), "letra": letra,
-                "duracion": int(self.music_dur.get_value()), "idioma": musica.IDIOMAS[self.music_lang.get_selected()][0],
-                "semilla": int(self.music_seed.get_value()), "instrumental": not letra,
-                **getattr(self, "music_extra", {})}
+        return musica.completar({
+            "titulo": self.music_title.get_text().strip() or (
+                letra.splitlines()[0].strip("[]# ")[:40] if letra else "Instrumental"),
+            "estilo": self._tv_text(self.music_desc),
+            **{k: e.get_text().strip() for k, e in self.music_fields.items()},
+            "letra": letra, "duracion": int(self.music_dur.get_value()),
+            "idioma": musica.IDIOMAS[self.music_lang.get_selected()][0],
+            "semilla": int(self.music_seed.get_value()), "instrumental": not letra})
+
+    def music_fill(self, c):
+        """Pone cada parte de una canción en su campo."""
+        self.music_title.set_text(c.get("titulo", ""))
+        campos = c.get("campos") or {k: c.get(k, "") for k in musica.CAMPOS}
+        if not any(campos.values()):  # canciones de antes: todo junto en la descripción
+            campos = {"estilo": c.get("descripcion", "")}
+        self.music_desc.get_buffer().set_text(campos.get("estilo") or "")
+        for k, e in self.music_fields.items():
+            e.set_text(campos.get(k) or "")
+        self.music_details.set_expanded(any(campos.get(k) for k in self.music_fields))
+        self.music_lyrics.get_buffer().set_text(c.get("letra", ""))
+        if c.get("duracion") is not None:
+            self.music_dur.set_value(float(c.get("duracion") or 0))
+        if c.get("idioma") in [k for k, _n in musica.IDIOMAS]:
+            self.music_lang.set_selected([k for k, _n in musica.IDIOMAS].index(c["idioma"]))
 
     def on_music_save(self, _btn):
         c = self.music_form()
@@ -1097,34 +1132,26 @@ class JuglarWindow(Adw.ApplicationWindow):
         except (OSError, ValueError) as e:
             self.toast(f"No se pudo abrir: {e}")
             return
-        self.music_title.set_text(c["titulo"])
-        self.music_lyrics.get_buffer().set_text(c["letra"])
-        cargado = ["letra"] if c["letra"] else []
-        if c["descripcion"]:
-            self.music_desc.get_buffer().set_text(c["descripcion"])
-            cargado.append("estilo")
-        if c["duracion"] is not None:
-            self.music_dur.set_value(c["duracion"])
-            cargado.append("duración")
-        if c["idioma"]:
-            self.music_lang.set_selected([k for k, _n in musica.IDIOMAS].index(c["idioma"]))
-        if c["semilla"] is not None:
-            self.music_seed.set_value(c["semilla"])
-        self.music_extra = {k: c[k] for k in ("bpm", "tonalidad") if c[k]}
+        self.music_fill(c)
+        self.music_seed.set_value(-1 if c["semilla"] is None else c["semilla"])
+        cargado = [musica.NOMBRES[k].lower() for k in musica.CAMPOS if c[k]]
+        cargado += ["duración"] if c["duracion"] is not None else []
+        cargado += ["letra"] if c["letra"] else []
         self.cfg["musica_dir"] = str(Path(path).parent)
-        self.toast(f"{Path(path).name}: " + (", ".join(cargado) or "sin letra (instrumental)"))
+        self.toast(f"{Path(path).name}: " + (", ".join(cargado) or "vacío"))
 
     def on_music_clear(self, _btn):
-        self.music_extra = {}
         for tv in (self.music_lyrics, self.music_desc):
             tv.get_buffer().set_text("")
+        for e in self.music_fields.values():
+            e.set_text("")
         self.music_title.set_text("")
         self.music_seed.set_value(-1)
 
     def on_music_generate(self, _btn):
         c = self.music_form()
         if not c["descripcion"]:
-            self.toast("Describe cómo quieres que suene (estilo, instrumentos, voz…)")
+            self.toast("Describe cómo quieres que suene (el estilo, y si quieres la voz, los instrumentos…)")
             self.music_desc.grab_focus()
             return
         self.cfg.update(musica_duracion=c["duracion"], musica_idioma=c["idioma"])
@@ -1132,7 +1159,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         try:
             job = cola.add_musica(rutas.MUSICA / f"{musica.nombre_archivo(c['titulo'])}.mp3", c["descripcion"],
                                   c["letra"], c["duracion"], c["semilla"], c["idioma"], instrumental=c["instrumental"],
-                                  titulo=c["titulo"], bpm=c.get("bpm"), tonalidad=c.get("tonalidad", ""))
+                                  titulo=c["titulo"], **cola.extras_de(c))
         except (RuntimeError, OSError) as e:
             self.toast(str(e))
             return
@@ -1140,12 +1167,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.toast(f"«{c['titulo']}» en cola (#{job['id']}): sale en la lista de la derecha cuando esté")
 
     def music_reuse(self, c):
-        self.music_extra = {k: c[k] for k in ("bpm", "tonalidad") if c.get(k)}
-        self.music_title.set_text(c.get("titulo", ""))
-        self.music_desc.get_buffer().set_text(c.get("descripcion", ""))
-        self.music_lyrics.get_buffer().set_text(c.get("letra", ""))
-        if c.get("duracion") is not None:
-            self.music_dur.set_value(float(c.get("duracion") or 0))
+        self.music_fill(c)
         if c.get("semilla_usada") is not None:
             try:
                 self.music_seed.set_value(int(str(c["semilla_usada"]).split(",")[0]))

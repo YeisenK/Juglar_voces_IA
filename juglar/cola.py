@@ -142,6 +142,13 @@ def add_rehacer(audio, n, texto=None):
     return job
 
 
+def extras_de(c):
+    """bpm, tonalidad, compás y los campos de «cómo suena» de una canción (musica.leer_cancion), para add_musica."""
+    import musica
+    return {"bpm": c.get("bpm"), "clave": c.get("clave", ""), "compas": c.get("compas", ""),
+            "campos": {k: c.get(k, "") for k in musica.CAMPOS}}
+
+
 def add_cancion_md(path, salida=None):
     """Encola la canción descrita en un .md (título, «Estilo:», «Duración:»… y la letra; ver docs/GUIA.md §8)."""
     import musica
@@ -152,7 +159,7 @@ def add_cancion_md(path, salida=None):
     return add_musica(out, c["descripcion"], c["letra"], c["duracion"] or 0,
                       -1 if c["semilla"] is None else c["semilla"], c["idioma"] or "es",
                       instrumental=c["instrumental"] or not c["letra"].strip(), titulo=c["titulo"],
-                      bpm=c["bpm"], tonalidad=c["tonalidad"])
+                      **extras_de(c))
 
 
 def add_actualizar(audio, nuevo):
@@ -176,7 +183,7 @@ def add_actualizar(audio, nuevo):
 
 
 def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es", instrumental=False,
-               titulo=None, overwrite=False, bpm=None, tonalidad=""):
+               titulo=None, overwrite=False, bpm=None, clave="", compas="", campos=None):
     """Encola generar una canción con ACE-Step (motores/musica_worker.py). Devuelve el trabajo."""
     if not rutas.ACESTEP_PY.exists():
         raise RuntimeError("ACE-Step no está instalado (vuelve a ejecutar install.sh y acepta la música)")
@@ -194,7 +201,8 @@ def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es
         pet = folder / "peticion.json"
         pet.write_text(json.dumps({"salida": str(out), "titulo": titulo or out.stem, "descripcion": descripcion,
                                    "letra": letra, "duracion": duracion, "semilla": semilla, "idioma": idioma,
-                                   "instrumental": instrumental, "bpm": bpm, "tonalidad": tonalidad},
+                                   "instrumental": instrumental, "bpm": bpm, "clave": clave, "compas": compas,
+                                   "campos": campos or {}},
                                   ensure_ascii=False), encoding="utf-8")
         job = {"id": job_id, "tipo": "musica", "src": str(pet), "out": str(out), "voice": "musica", "speed": 1.0,
                "cmd": [str(rutas.ACESTEP_PY), str(MUSICA_WORKER), str(pet)],
@@ -613,14 +621,14 @@ def main():
             sys.exit("-o solo vale con una canción")
         for f in archivos or [None]:
             try:
-                c = musica.leer_cancion(f) if f else {"titulo": args.output.stem if args.output else "Canción",
-                                                      "descripcion": "", "letra": "", "duracion": None,
-                                                      "idioma": None, "semilla": None, "bpm": None,
-                                                      "tonalidad": "", "instrumental": True}
+                c = musica.leer_cancion(f) if f else musica.completar(
+                    {**musica.nueva_cancion(args.output.stem if args.output else "Canción"), "instrumental": True})
             except (OSError, ValueError) as e:
                 print(f"{f}: {e}", file=sys.stderr)
                 continue
-            desc = args.descripcion or c["descripcion"]
+            if args.descripcion:  # -d sustituye al estilo (los demás campos del .md se quedan)
+                c = musica.completar({**c, "estilo": args.descripcion})
+            desc = c["descripcion"]
             if not desc:
                 print(f"{f}: no dice cómo suena (añade «Estilo: …» bajo el título, o usa -d)", file=sys.stderr)
                 continue
@@ -628,7 +636,7 @@ def main():
             job = add_musica(out, desc, c["letra"], args.duracion if args.duracion is not None else (c["duracion"] or 0),
                              args.semilla if args.semilla is not None else (-1 if c["semilla"] is None else c["semilla"]),
                              args.idioma or c["idioma"] or "es", instrumental=c["instrumental"] or not c["letra"].strip(),
-                             titulo=c["titulo"], bpm=c["bpm"], tonalidad=c["tonalidad"])
+                             titulo=c["titulo"], **extras_de(c))
             print(f"#{job['id']}  {job['title']}  →  {job['out']}")
     elif args.cmd == "list":
         q = snapshot()

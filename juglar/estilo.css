@@ -153,3 +153,4 @@ toast { border-radius: 6px; }
 /* Música */
 .music-box { border: 1px solid #2a2a2a; border-radius: 6px; background: #151515; }
 .music-desc, .music-desc text { font-size: 14px; }
+.music-details > title { font-size: 12px; font-weight: 700; color: #a0a0a0; }

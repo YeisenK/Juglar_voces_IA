@@ -11,7 +11,8 @@ Se ejecuta con el Python del entorno de ACE-Step (<JUGLAR_DATA>/acestep/.venv). 
    "idioma": "es",                      idioma de la voz cantada
    "duracion": 120,                     segundos (10-600); 0 o nada = la que elija el modelo
    "semilla": -1,                       -1 = al azar
-   "bpm": null, "tonalidad": ""}        opcionales
+   "bpm": null, "clave": "D minor",     opcionales: tempo, tonalidad
+   "compas": "3"}                       2, 3, 4 o 6 (3/4, 6/8…)
 
 Salida por stdout, una línea JSON por evento (el mismo protocolo que md2audio --json):
   {"type": "progress", "done": N, "total": 100, "fase": "…"}
@@ -119,10 +120,11 @@ def main():
     if dur > 0:
         dur = max(10.0, min(dur, float(tope or 600)))
     params = GenerationParams(
-        task_type="text2music", caption=(pet.get("descripcion") or "")[:512],
+        task_type="text2music", caption=(pet.get("descripcion") or "")[:2000],  # el compositor (LM) la resume
         lyrics="[Instrumental]" if instrumental else letra[:4096], instrumental=instrumental,
         vocal_language=pet.get("idioma") or "es", duration=dur if dur > 0 else -1.0,
-        bpm=pet.get("bpm") or None, keyscale=pet.get("tonalidad") or "",
+        bpm=pet.get("bpm") or None, keyscale=pet.get("clave") or pet.get("tonalidad") or "",
+        timesignature=str(pet.get("compas") or ""),
         inference_steps=8, shift=3.0, seed=int(pet.get("semilla", -1)), thinking=thinking,
         use_cot_language=False)
     config = GenerationConfig(batch_size=1, audio_format=formato, use_random_seed=int(pet.get("semilla", -1)) < 0,

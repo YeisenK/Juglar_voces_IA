@@ -3,6 +3,9 @@
 Estilo: balada folk acústica con guitarra española, lenta e íntima
 Voz: masculina, cálida
 Instrumentos: guitarra, flauta
+Ambiente: taberna al anochecer, melancólico
+Tempo: lento, 72 BPM, compás de 3/4
+Tonalidad: re menor
 Duración: 2:30
 Idioma: español
 Semilla: azar

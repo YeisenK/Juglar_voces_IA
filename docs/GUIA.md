@@ -388,7 +388,7 @@ Hay dos maneras: rellenar el formulario de la pestaña, o escribir la canción e
 **Desde la pestaña Música:**
 
 1. **Título**: el nombre del archivo que se crea.
-2. **Cómo suena**: la música descrita en lenguaje natural (estilo, instrumentos, voz, tempo, ambiente). El botón **Ejemplos** rellena algunas para empezar.
+2. **Cómo suena · estilo**: la música descrita en lenguaje natural. El botón **Ejemplos** rellena algunas para empezar. Debajo, en **Voz, instrumentos, ambiente, tempo y tonalidad**, cada detalle tiene su campo (los mismos que las claves del `.md`).
 3. **Letra**: escríbela o pégala. Sin letra, sale instrumental.
 4. Abajo: **duración** en segundos (0 = que la elija el modelo; hasta 8 minutos), **idioma** de la voz y **semilla** (−1 = al azar).
 5. **Generar canción**: va a la misma cola que los audios (así nunca coincide con Qwen en la tarjeta) y aparece a la derecha cuando está. Se guarda en `~/Música/Juglar`.
@@ -397,7 +397,7 @@ Botones de arriba:
 
 | Botón | Qué hace |
 |---|---|
-| **Abrir…** | Abre un `.md` de canción y rellena todo el formulario: título, cómo suena, duración, idioma, semilla y letra. Si el archivo solo tiene letra, carga solo la letra. También puedes arrastrar el archivo a la ventana. |
+| **Abrir…** | Abre un `.md` de canción y pone cada cosa en su campo: título, estilo, voz, instrumentos, ambiente, tempo, tonalidad, duración, idioma, semilla y letra. Si el archivo solo tiene letra, carga solo la letra. También puedes arrastrar el archivo a la ventana. |
 | **Guardar .md…** | Guarda lo que hay en el formulario como `.md` de canción, para generarla otra vez cuando quieras o retocarla en tu editor. |
 | **Añadir .md a la cola…** | Elige uno o varios `.md` de canción y se generan directamente, sin abrirlos. Los que no digan cómo suenan no se añaden y te dice por qué. |
 | **Nueva** | Vacía el formulario. |
@@ -416,6 +416,9 @@ Un archivo = una canción. Plantilla lista para copiar: [`docs/plantilla_cancion
 Estilo: balada folk acústica con guitarra española, lenta e íntima
 Voz: masculina, cálida
 Instrumentos: guitarra, flauta, pandero
+Ambiente: taberna al anochecer
+Tempo: lento, 72 BPM, compás de 3/4
+Tonalidad: re menor
 Duración: 2:30
 Idioma: español
 Semilla: azar
@@ -443,15 +446,16 @@ Claves de la cabecera (da igual mayúsculas o tildes):
 
 | Clave | Qué es | Ejemplos |
 |---|---|---|
-| `Estilo:` (o `Descripción:`, `Cómo suena:`, `Música:`) | Cómo suena, en tus palabras. Es lo más importante. | `balada folk acústica, lenta e íntima` |
-| `Voz:` | Tipo de voz que canta. Se suma al estilo. | `masculina, cálida` · `femenina, dulce y susurrada` · `coro` |
-| `Instrumentos:` · `Género:` · `Ambiente:` · `Ritmo:` | Más detalles. También se suman al estilo. | `guitarra española, laúd` · `taberna medieval` |
-| `> texto` | Una línea que empieza con `>` también se suma al estilo (útil para descripciones largas, en varias líneas). | `> empieza suave y crece en el estribillo` |
+| `Estilo:` (o `Descripción:`, `Cómo suena:`, `Música:`, `Género:`) | Cómo suena, en tus palabras. Es lo más importante. | `balada folk acústica, lenta e íntima` |
+| `Voz:` | Quién canta y cómo. | `masculina, cálida` · `coro de niñas al unísono` |
+| `Instrumentos:` | Qué suena (y qué no). | `arpa celta, flauta de madera; sin batería` |
+| `Ambiente:` | El ambiente o la sensación. | `patio de pueblo al anochecer, melancolía` |
+| `Tempo:` (o `Ritmo:`, `Compás:`) | Texto libre. Si aparecen, se usan además los **BPM** (`72 BPM`) y el **compás** (`3/4`, `6/8`) para fijar la velocidad. | `lento, 72 BPM, compás de 3/4` |
+| `Tonalidad:` | Texto libre. Si hay una tonalidad clara (`re menor`, `sol mayor`, `Am`) se fija; los modos (`dórico en mi`) quedan solo como descripción. | `re menor, cadencias suaves` |
+| `> texto` | Una línea que empieza con `>` se suma al estilo (útil para descripciones largas, en varias líneas). | `> empieza suave y crece en el estribillo` |
 | `Duración:` | Cuánto dura. `auto` = la decide el modelo. Máximo 8 minutos. | `2:30` · `150` · `2 min 30 s` · `auto` |
 | `Idioma:` | Idioma en que se canta. Por defecto, español. | `español` · `inglés` · `latín` · `es` |
 | `Semilla:` | Número para repetir exactamente una canción. | `azar` · `1234` |
-| `Tempo:` | Pulsos por minuto (si no, lo elige el modelo). | `80` · `120 bpm` |
-| `Tonalidad:` | Tonalidad (si no, la elige el modelo). | `Re mayor` · `Am` · `C Major` |
 | `Instrumental:` | Sin voz, aunque haya letra. | `sí` |
 | `Título:` | Otra forma de poner el título. | `El juglar` |
 
@@ -467,7 +471,11 @@ Etiquetas de la letra:
 | `[Solo]` · `[Interludio]` · `[Instrumental]` | `[Solo]` · `[Interlude]` · `[Instrumental]` | Partes sin voz |
 | `[Final]` · `[Cierre]` | `[Outro]` | El final |
 
-Los encabezados de Markdown valen igual que los corchetes: `## Estribillo` o una línea `**Estribillo**`. Después de la etiqueta se puede añadir un detalle: `[Estribillo: todos a coro]`.
+Cada clave va a su campo de la pestaña; para generar, Juglar junta el estilo y los detalles («Voz: …. Instrumentos: …») en una sola descripción. No importa que sea larga: el compositor de ACE-Step la lee entera y la resume antes de componer.
+
+Dentro de una etiqueta puedes dar indicaciones para esa parte: `[Estribillo: una niña sola; el coro responde]`.
+
+Los encabezados de Markdown valen igual que los corchetes: `## Estribillo` o una línea `**Estribillo**`. 
 
 También se acepta la cabecera entre `---` al principio del archivo (como en otros programas de notas):
 
@@ -500,4 +508,4 @@ juglar-cola musica "El juglar.md" -d "rock épico con guitarras eléctricas"   #
 juglar-cola musica -d "música medieval de taberna, laúd y flauta" -t 60 -o ~/Música/Juglar/Taberna.mp3   # instrumental
 ```
 
-`-d` (estilo), `-t` (segundos), `--semilla` e `--idioma` mandan sobre lo que diga el `.md`.
+`-d` sustituye al estilo (voz, instrumentos y lo demás del `.md` se quedan); `-t` (segundos), `--semilla` e `--idioma` mandan sobre lo que diga el `.md`.
