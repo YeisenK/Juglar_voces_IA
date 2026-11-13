@@ -67,7 +67,7 @@ Abre **Juglar** desde el menú de aplicaciones o escribe `juglar`. La app tiene 
 | **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. **Exportar carpeta…** convierte un libro entero (una carpeta, un capítulo por archivo). En cada audio terminado, **Rehacer un trozo** vuelve a generar solo la frase que salió mal, o carga el `.md` corregido y rehace solo lo que cambió. **Historial**: los audios exportados que siguen en la computadora. |
 | **Voces** | Escuchar cada voz o personaje (*Probar*), ajustar su temperatura, crear personajes con nombre y voces nuevas. |
 | **Audiolibro** | Modo flash, pausas, voz de los diálogos, revisión con Whisper, volumen y diccionario de pronunciación. |
-| **Música** | Canciones con tu letra y la música descrita con tus palabras («balada folk con guitarra y voz cálida»), con [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5). Ver [la guía](docs/GUIA.md#8-música-canciones-con-tu-letra). |
+| **Música** | Canciones con tu letra y la música descrita con tus palabras («balada folk con guitarra y voz cálida»), con [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5). Se pueden escribir en un `.md` (título, `Estilo:`, `Duración:`… y la letra) y abrirlas o añadirlas a la cola. Ver [la guía](docs/GUIA.md#8-música-canciones-con-tu-letra). |
 
 Atajos: `Ctrl+Intro` leer/pausar · `Esc` detener · `Ctrl+O` abrir y leer · `Ctrl+Mayús+E` exportar · `Ctrl+1…5` cambiar de pestaña.
 
@@ -103,7 +103,7 @@ A la mañana siguiente, el camino estaba cubierto de nieve.
 | `juglar-cola libro CARPETA` | Exporta un libro entero: cada `.md`/`.txt` de la carpeta es un capítulo; los audios van a `CARPETA/audio/`. Ver [libros por carpetas](docs/GUIA.md#6-libros-por-carpetas). |
 | `md2audio AUDIO --fragmentos` · `juglar-cola rehacer AUDIO N` | Lista los trozos de un audio exportado y vuelve a generar el trozo N. Ver [rehacer un trozo](docs/GUIA.md#7-rehacer-un-trozo-de-un-audio). |
 | `juglar-cola rehacer AUDIO --md CORREGIDO.md` | Rehace solo los trozos que cambiaron en el texto corregido (`md2audio AUDIO --comparar CORREGIDO.md` los enseña antes). |
-| `juglar-cola musica --letra LETRA.md -d "descripción" -t 120` | Genera una canción con ACE-Step (en `~/Música/Juglar`). |
+| `juglar-cola musica CANCIÓN.md…` | Genera canciones con ACE-Step (en `~/Música/Juglar`) a partir de `.md` con título, `Estilo:` y letra. Ver [las reglas](docs/GUIA.md#82-reglas-del-md-de-canción) y la [plantilla](docs/plantilla_cancion.md). |
 | `juglar-pruebas` | Genera de una vez las pruebas de voz que falten. |
 
 ## Dónde se guarda cada cosa

@@ -888,8 +888,15 @@ class JuglarWindow(Adw.ApplicationWindow):
         root = Gtk.Box()
         left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
         head, right = strip("Canción")
-        right.append(tool_button("document-open-symbolic", "Abrir letra…", "Cargar la letra de un .txt o .md",
+        right.append(tool_button("document-open-symbolic", "Abrir…",
+                                 "Abrir una canción .md (título, Estilo:, Duración:… y la letra) o solo una letra",
                                  self.on_music_open, "flat"))
+        right.append(tool_button("document-save-symbolic", "Guardar .md…",
+                                 "Guardar la canción (letra y cómo suena) en un .md para generarla cuando quieras",
+                                 self.on_music_save, "flat"))
+        right.append(tool_button("list-add-symbolic", "Añadir .md a la cola…",
+                                 "Generar directamente una o varias canciones .md, sin abrirlas",
+                                 self.on_music_add_files, "flat"))
         right.append(tool_button("edit-clear-all-symbolic", "Nueva", "Vaciar la letra, la descripción y el título",
                                  self.on_music_clear, "flat"))
         left.append(head)
@@ -940,7 +947,8 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.music_lyrics = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=16, bottom_margin=16,
                                          left_margin=24, right_margin=24, pixels_below_lines=3)
         self.music_lyrics.add_css_class("editor")
-        lhint = label("Escribe o pega la letra de tu canción, o ábrela de un archivo.\n"
+        lhint = label("Escribe o pega la letra de tu canción, o abre un .md de canción\n"
+                      "(con «Estilo:», «Duración:»… bajo el título; ver la guía, sección 8).\n"
                       "Sin letra, la canción sale instrumental.", "hint", justify=Gtk.Justification.CENTER,
                       can_target=False, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         self.music_lyrics.get_buffer().connect("changed", lambda b: (lhint.set_visible(b.get_char_count() == 0),
@@ -999,6 +1007,7 @@ class JuglarWindow(Adw.ApplicationWindow):
         root.append(side)
         self.music_side = side
         self.music_sig = None
+        self.music_extra = {}
         if not rutas.ACESTEP_PY.exists():
             self.music_go.set_sensitive(False)
             self.music_go.set_tooltip_text("ACE-Step no está instalado: ejecuta install.sh y acepta la música")
@@ -1021,7 +1030,59 @@ class JuglarWindow(Adw.ApplicationWindow):
         return b.get_text(*b.get_bounds(), False).strip()
 
     def on_music_open(self, _btn):
-        self.file_dialog("Abre la letra de la canción").open(self, None, self._music_open_done)
+        self.file_dialog("Abre una canción o una letra").open(self, None, self._music_open_done)
+
+    def music_form(self):
+        """La canción tal como está en el formulario (el mismo diccionario que musica.leer_cancion)."""
+        letra = self._tv_text(self.music_lyrics)
+        return {"titulo": self.music_title.get_text().strip() or (
+                    letra.splitlines()[0].strip("[]# ")[:40] if letra else "Instrumental"),
+                "descripcion": self._tv_text(self.music_desc), "letra": letra,
+                "duracion": int(self.music_dur.get_value()), "idioma": musica.IDIOMAS[self.music_lang.get_selected()][0],
+                "semilla": int(self.music_seed.get_value()), "instrumental": not letra,
+                **getattr(self, "music_extra", {})}
+
+    def on_music_save(self, _btn):
+        c = self.music_form()
+        d = Gtk.FileDialog(title="Guardar la canción", initial_name=f"{musica.nombre_archivo(c['titulo'])}.md")
+        if self.cfg.get("musica_dir") and Path(self.cfg["musica_dir"]).is_dir():
+            d.set_initial_folder(Gio.File.new_for_path(self.cfg["musica_dir"]))
+
+        def hecho(dialog, res):
+            try:
+                path = Path(dialog.save_finish(res).get_path())
+            except GLib.Error:
+                return
+            if path.suffix.lower() not in (".md", ".txt"):
+                path = path.with_suffix(".md")
+            path.write_text(musica.escribir_cancion(self.music_form()), encoding="utf-8")
+            self.cfg["musica_dir"] = str(path.parent)
+            save_config(self.cfg)
+            self.toast(f"Guardada en {path.name}")
+        d.save(self, None, hecho)
+
+    def on_music_add_files(self, _btn):
+        def hecho(dialog, res):
+            try:
+                files = dialog.open_multiple_finish(res)
+            except GLib.Error:
+                return
+            ok, fallos = [], []
+            for k in range(files.get_n_items()):
+                f = Path(files.get_item(k).get_path())
+                try:
+                    cola.add_cancion_md(f)
+                    ok.append(f.name)
+                except (OSError, ValueError, RuntimeError) as e:
+                    fallos.append(str(e))
+            self.refresh_queue()
+            if fallos:
+                dlg = Adw.AlertDialog(heading=f"{len(ok)} en cola, {len(fallos)} sin añadir", body="\n\n".join(fallos))
+                dlg.add_response("ok", "Entendido")
+                dlg.present(self)
+            elif ok:
+                self.toast(f"{len(ok)} canción{'es' if len(ok) > 1 else ''} en cola")
+        self.file_dialog("Elige las canciones (.md)").open_multiple(self, None, hecho)
 
     def _music_open_done(self, dialog, res):
         try:
@@ -1032,42 +1093,54 @@ class JuglarWindow(Adw.ApplicationWindow):
 
     def load_lyrics(self, path):
         try:
-            titulo, letra = musica.leer_letra(path)
-        except OSError as e:
+            c = musica.leer_cancion(path)
+        except (OSError, ValueError) as e:
             self.toast(f"No se pudo abrir: {e}")
             return
-        self.music_title.set_text(titulo)
-        self.music_lyrics.get_buffer().set_text(letra)
-        self.toast(f"Letra cargada: {Path(path).name}")
+        self.music_title.set_text(c["titulo"])
+        self.music_lyrics.get_buffer().set_text(c["letra"])
+        cargado = ["letra"] if c["letra"] else []
+        if c["descripcion"]:
+            self.music_desc.get_buffer().set_text(c["descripcion"])
+            cargado.append("estilo")
+        if c["duracion"] is not None:
+            self.music_dur.set_value(c["duracion"])
+            cargado.append("duración")
+        if c["idioma"]:
+            self.music_lang.set_selected([k for k, _n in musica.IDIOMAS].index(c["idioma"]))
+        if c["semilla"] is not None:
+            self.music_seed.set_value(c["semilla"])
+        self.music_extra = {k: c[k] for k in ("bpm", "tonalidad") if c[k]}
+        self.cfg["musica_dir"] = str(Path(path).parent)
+        self.toast(f"{Path(path).name}: " + (", ".join(cargado) or "sin letra (instrumental)"))
 
     def on_music_clear(self, _btn):
+        self.music_extra = {}
         for tv in (self.music_lyrics, self.music_desc):
             tv.get_buffer().set_text("")
         self.music_title.set_text("")
         self.music_seed.set_value(-1)
 
     def on_music_generate(self, _btn):
-        desc, letra = self._tv_text(self.music_desc), self._tv_text(self.music_lyrics)
-        if not desc:
+        c = self.music_form()
+        if not c["descripcion"]:
             self.toast("Describe cómo quieres que suene (estilo, instrumentos, voz…)")
             self.music_desc.grab_focus()
             return
-        titulo = self.music_title.get_text().strip() or (letra.splitlines()[0].strip("[]# ")[:40] if letra
-                                                          else "Instrumental")
-        lang = musica.IDIOMAS[self.music_lang.get_selected()][0]
-        dur = int(self.music_dur.get_value())
-        self.cfg.update(musica_duracion=dur, musica_idioma=lang)
+        self.cfg.update(musica_duracion=c["duracion"], musica_idioma=c["idioma"])
         save_config(self.cfg)
         try:
-            job = cola.add_musica(rutas.MUSICA / f"{musica.nombre_archivo(titulo)}.mp3", desc, letra, dur,
-                                  int(self.music_seed.get_value()), lang, instrumental=not letra, titulo=titulo)
+            job = cola.add_musica(rutas.MUSICA / f"{musica.nombre_archivo(c['titulo'])}.mp3", c["descripcion"],
+                                  c["letra"], c["duracion"], c["semilla"], c["idioma"], instrumental=c["instrumental"],
+                                  titulo=c["titulo"], bpm=c.get("bpm"), tonalidad=c.get("tonalidad", ""))
         except (RuntimeError, OSError) as e:
             self.toast(str(e))
             return
         self.refresh_queue()
-        self.toast(f"«{titulo}» en cola (#{job['id']}): sale en la lista de la derecha cuando esté")
+        self.toast(f"«{c['titulo']}» en cola (#{job['id']}): sale en la lista de la derecha cuando esté")
 
     def music_reuse(self, c):
+        self.music_extra = {k: c[k] for k in ("bpm", "tonalidad") if c.get(k)}
         self.music_title.set_text(c.get("titulo", ""))
         self.music_desc.get_buffer().set_text(c.get("descripcion", ""))
         self.music_lyrics.get_buffer().set_text(c.get("letra", ""))

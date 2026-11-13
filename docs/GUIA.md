@@ -375,17 +375,46 @@ También en **Exportar** está el botón **Historial**: todos los audios que has
 
 ## 8. Música: canciones con tu letra
 
-La pestaña **Música** convierte en canción una letra que ya tengas escrita, con la música que describas con tus palabras. Usa [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5), un modelo libre que corre en tu tarjeta gráfica.
+La pestaña **Música** convierte en canción una letra que ya tengas escrita, con la música que describas con tus palabras. Usa [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5), un modelo libre que corre en tu tarjeta gráfica. La música es opcional: `install.sh` pregunta si la instalas (o `CON_MUSICA=1 ./install.sh`).
 
-1. **Letra**: escríbela o pégala, o pulsa **Abrir letra…** (o arrastra un `.txt`/`.md` a la ventana). Si el archivo empieza con `# Título`, ese es el título de la canción. Sin letra, sale instrumental.
-2. **Cómo suena**: descríbelo en lenguaje natural: estilo, instrumentos, tipo de voz, tempo y ambiente. Por ejemplo: *«balada folk con guitarra española y voz masculina cálida, lenta e íntima»*. El botón **Ejemplos** rellena algunas para empezar.
-3. **Duración** en segundos (0 = que la elija el modelo según la letra; hasta 8 minutos), **idioma** de la voz y **semilla** (−1 = al azar).
-4. **Generar canción**: va a la misma cola que los audios (así nunca coincide con Qwen en la tarjeta) y aparece a la derecha cuando está. Se guarda en `~/Música/Juglar`.
+### 8.1 Cómo se usa
 
-Marca las partes de la letra entre corchetes, en español o en inglés:
+Hay dos maneras: rellenar el formulario de la pestaña, o escribir la canción en un `.md` (sección 8.2) y abrirlo o añadirlo a la cola.
 
-```text
+**Desde la pestaña Música:**
+
+1. **Título**: el nombre del archivo que se crea.
+2. **Cómo suena**: la música descrita en lenguaje natural (estilo, instrumentos, voz, tempo, ambiente). El botón **Ejemplos** rellena algunas para empezar.
+3. **Letra**: escríbela o pégala. Sin letra, sale instrumental.
+4. Abajo: **duración** en segundos (0 = que la elija el modelo; hasta 8 minutos), **idioma** de la voz y **semilla** (−1 = al azar).
+5. **Generar canción**: va a la misma cola que los audios (así nunca coincide con Qwen en la tarjeta) y aparece a la derecha cuando está. Se guarda en `~/Música/Juglar`.
+
+Botones de arriba:
+
+| Botón | Qué hace |
+|---|---|
+| **Abrir…** | Abre un `.md` de canción y rellena todo el formulario: título, cómo suena, duración, idioma, semilla y letra. Si el archivo solo tiene letra, carga solo la letra. También puedes arrastrar el archivo a la ventana. |
+| **Guardar .md…** | Guarda lo que hay en el formulario como `.md` de canción, para generarla otra vez cuando quieras o retocarla en tu editor. |
+| **Añadir .md a la cola…** | Elige uno o varios `.md` de canción y se generan directamente, sin abrirlos. Los que no digan cómo suenan no se añaden y te dice por qué. |
+| **Nueva** | Vacía el formulario. |
+
+En la lista de canciones de la derecha: ▶ escuchar, ↻ **cargar su letra, estilo y semilla** (si generas sin cambiar nada, sale la misma; cambia el estilo o pon la semilla al azar para variaciones), abrir la carpeta y mandar a la papelera. Cada canción guarda sus datos en un archivo oculto a su lado (`.Canción.mp3.musica.json`).
+
+La primera canción tarda más porque descarga el modelo (unos 10 GB). Después, una canción de 30-40 segundos tarda unos 20-25 segundos en una tarjeta de 8 GB.
+
+### 8.2 Reglas del `.md` de canción
+
+Un archivo = una canción. Plantilla lista para copiar: [`docs/plantilla_cancion.md`](plantilla_cancion.md).
+
+```markdown
 # El juglar
+
+Estilo: balada folk acústica con guitarra española, lenta e íntima
+Voz: masculina, cálida
+Instrumentos: guitarra, flauta, pandero
+Duración: 2:30
+Idioma: español
+Semilla: azar
 
 [Estrofa]
 Por el camino de piedra
@@ -399,18 +428,72 @@ que la noche es larga ya
 …
 ```
 
-Valen `[Estrofa]`, `[Estribillo]` (o `[Coro]`), `[Preestribillo]`, `[Puente]`, `[Intro]`, `[Final]`, `[Solo]`, `[Interludio]` e `[Instrumental]`, y también sus nombres en inglés (`[Verse]`, `[Chorus]`, `[Bridge]`…). Los encabezados de Markdown (`## Estribillo`) cuentan igual.
+Las reglas:
 
-En la lista de canciones, ↻ **carga la letra, la descripción y la semilla** de una canción: si generas sin cambiar nada sale la misma; cambia la descripción o pon la semilla al azar para probar variaciones. Cada canción guarda sus datos en un archivo oculto a su lado (`.Canción.mp3.musica.json`).
+1. **Título**: la primera línea `# …`. Si no hay, se usa el nombre del archivo.
+2. **Cabecera**: justo debajo del título, líneas `Clave: valor`, una por línea. Se pueden dejar líneas en blanco entre ellas. **La primera línea que no es una clave conocida empieza la letra**: por eso conviene empezar la letra con una etiqueta (`[Estrofa]`).
+3. **Letra**: todo lo demás. Las partes se marcan entre corchetes, en español o en inglés.
+4. Lo único obligatorio para generarla es **`Estilo:`** (cómo suena). Sin letra, o con `[Instrumental]` como letra, sale instrumental.
 
-La primera canción tarda más: descarga el modelo (unos 10 GB). Después, una canción de 2 minutos tarda alrededor de un minuto en una tarjeta de 8 GB.
+Claves de la cabecera (da igual mayúsculas o tildes):
 
-Desde la terminal:
+| Clave | Qué es | Ejemplos |
+|---|---|---|
+| `Estilo:` (o `Descripción:`, `Cómo suena:`, `Música:`) | Cómo suena, en tus palabras. Es lo más importante. | `balada folk acústica, lenta e íntima` |
+| `Voz:` | Tipo de voz que canta. Se suma al estilo. | `masculina, cálida` · `femenina, dulce y susurrada` · `coro` |
+| `Instrumentos:` · `Género:` · `Ambiente:` · `Ritmo:` | Más detalles. También se suman al estilo. | `guitarra española, laúd` · `taberna medieval` |
+| `> texto` | Una línea que empieza con `>` también se suma al estilo (útil para descripciones largas, en varias líneas). | `> empieza suave y crece en el estribillo` |
+| `Duración:` | Cuánto dura. `auto` = la decide el modelo. Máximo 8 minutos. | `2:30` · `150` · `2 min 30 s` · `auto` |
+| `Idioma:` | Idioma en que se canta. Por defecto, español. | `español` · `inglés` · `latín` · `es` |
+| `Semilla:` | Número para repetir exactamente una canción. | `azar` · `1234` |
+| `Tempo:` | Pulsos por minuto (si no, lo elige el modelo). | `80` · `120 bpm` |
+| `Tonalidad:` | Tonalidad (si no, la elige el modelo). | `Re mayor` · `Am` · `C Major` |
+| `Instrumental:` | Sin voz, aunque haya letra. | `sí` |
+| `Título:` | Otra forma de poner el título. | `El juglar` |
+
+Etiquetas de la letra:
+
+| En español | Equivale a | Para qué |
+|---|---|---|
+| `[Intro]` · `[Introducción]` | `[Intro]` | Entrada, normalmente sin voz |
+| `[Estrofa]` · `[Estrofa 2]` · `[Verso]` | `[Verse]` | Las estrofas |
+| `[Preestribillo]` | `[Pre-Chorus]` | Lo que sube antes del estribillo |
+| `[Estribillo]` · `[Coro]` | `[Chorus]` | El estribillo |
+| `[Puente]` | `[Bridge]` | La parte distinta antes del último estribillo |
+| `[Solo]` · `[Interludio]` · `[Instrumental]` | `[Solo]` · `[Interlude]` · `[Instrumental]` | Partes sin voz |
+| `[Final]` · `[Cierre]` | `[Outro]` | El final |
+
+Los encabezados de Markdown valen igual que los corchetes: `## Estribillo` o una línea `**Estribillo**`. Después de la etiqueta se puede añadir un detalle: `[Estribillo: todos a coro]`.
+
+También se acepta la cabecera entre `---` al principio del archivo (como en otros programas de notas):
+
+```markdown
+---
+título: Marcha de los caballeros
+estilo: épica orquestal con tambores de guerra y metales
+duración: 2:10
+semilla: 42
+---
+
+[Instrumental]
+```
+
+### 8.3 Consejos
+
+- **Describe en el estilo lo que oirías**, no lo que cuenta la letra: género, instrumentos, voz, tempo y ambiente. *«bolero romántico con requinto y voz masculina melancólica, tempo lento»* funciona mejor que *«una canción triste sobre la despedida»*.
+- **Versos cortos y regulares** (de 6 a 10 sílabas) se cantan mejor. Una estrofa de 4 líneas y un estribillo que se repite dan la estructura más clara.
+- Si el estribillo se repite, **escríbelo cada vez** (`[Estribillo]` con su letra otra vez); el modelo no repite solo.
+- Para un tema de **más de 2 minutos**, pon la duración: si no, el modelo la ajusta a lo que dure la letra.
+- ¿Te gustó una canción pero quieres retocar algo? Pulsa ↻ en la lista: se carga con su semilla. Cambia solo el estilo o una palabra y vuelve a generar: saldrá parecida.
+- Para probar varias versiones de la misma letra, deja la semilla en `azar` y genera varias veces; con **Guardar .md…** te quedas con la ficha de la que más te guste (la semilla está en la lista con ↻).
+
+### 8.4 Desde la terminal
 
 ```bash
-juglar-cola musica --letra "El juglar.md" -d "balada folk con guitarra y voz masculina" -t 120
+juglar-cola musica "El juglar.md"                     # una canción .md (con Estilo: y la letra)
+juglar-cola musica canciones/*.md                     # varias de golpe, una tras otra
+juglar-cola musica "El juglar.md" -d "rock épico con guitarras eléctricas"   # mismo texto, otro estilo
 juglar-cola musica -d "música medieval de taberna, laúd y flauta" -t 60 -o ~/Música/Juglar/Taberna.mp3   # instrumental
 ```
 
-La música es opcional: `install.sh` pregunta si la instalas (o `CON_MUSICA=1 ./install.sh`).
-
+`-d` (estilo), `-t` (segundos), `--semilla` e `--idioma` mandan sobre lo que diga el `.md`.

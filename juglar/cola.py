@@ -6,7 +6,7 @@ de la cola de uno en uno. Es independiente de la ventana: sigue con la pantalla 
 y mientras convierte impide que el equipo se suspenda solo. El estado vive en un JSON con candado.
 
 Uso: juglar-cola add ARCHIVO... | libro CARPETA | rehacer AUDIO N [--texto T] | rehacer AUDIO --md CORREGIDO.md
-                  | musica -d DESCRIPCIÓN [--letra ARCHIVO] [-t SEGUNDOS] [-o SALIDA]
+                  | musica CANCIÓN.md... | musica -d DESCRIPCIÓN [--letra ARCHIVO] [-t SEGUNDOS] [-o SALIDA]
                   | list | pause | resume | cancel ID | remove ID | clear
 """
 import argparse
@@ -142,6 +142,19 @@ def add_rehacer(audio, n, texto=None):
     return job
 
 
+def add_cancion_md(path, salida=None):
+    """Encola la canción descrita en un .md (título, «Estilo:», «Duración:»… y la letra; ver docs/GUIA.md §8)."""
+    import musica
+    c = musica.leer_cancion(path)
+    if not c["descripcion"]:
+        raise ValueError(f"«{Path(path).name}» no dice cómo suena: añade una línea «Estilo: …» bajo el título")
+    out = salida or rutas.MUSICA / f"{musica.nombre_archivo(c['titulo'])}.mp3"
+    return add_musica(out, c["descripcion"], c["letra"], c["duracion"] or 0,
+                      -1 if c["semilla"] is None else c["semilla"], c["idioma"] or "es",
+                      instrumental=c["instrumental"] or not c["letra"].strip(), titulo=c["titulo"],
+                      bpm=c["bpm"], tonalidad=c["tonalidad"])
+
+
 def add_actualizar(audio, nuevo):
     """Encola rehacer solo los trozos de un audio que cambiaron en su texto corregido (md2audio --actualizar)."""
     audio, nuevo = Path(audio), Path(nuevo).resolve()
@@ -163,7 +176,7 @@ def add_actualizar(audio, nuevo):
 
 
 def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es", instrumental=False,
-               titulo=None, overwrite=False):
+               titulo=None, overwrite=False, bpm=None, tonalidad=""):
     """Encola generar una canción con ACE-Step (motores/musica_worker.py). Devuelve el trabajo."""
     if not rutas.ACESTEP_PY.exists():
         raise RuntimeError("ACE-Step no está instalado (vuelve a ejecutar install.sh y acepta la música)")
@@ -181,7 +194,8 @@ def add_musica(salida, descripcion, letra="", duracion=0, semilla=-1, idioma="es
         pet = folder / "peticion.json"
         pet.write_text(json.dumps({"salida": str(out), "titulo": titulo or out.stem, "descripcion": descripcion,
                                    "letra": letra, "duracion": duracion, "semilla": semilla, "idioma": idioma,
-                                   "instrumental": instrumental}, ensure_ascii=False), encoding="utf-8")
+                                   "instrumental": instrumental, "bpm": bpm, "tonalidad": tonalidad},
+                                  ensure_ascii=False), encoding="utf-8")
         job = {"id": job_id, "tipo": "musica", "src": str(pet), "out": str(out), "voice": "musica", "speed": 1.0,
                "cmd": [str(rutas.ACESTEP_PY), str(MUSICA_WORKER), str(pet)],
                "title": f"♪ {titulo or out.stem}", "status": "queued", "done": 0, "total": 0, "eta": None,
@@ -533,12 +547,14 @@ def main():
     rh.add_argument("n", type=int, nargs="?", help="número del fragmento")
     rh.add_argument("--md", type=Path, help="texto corregido: rehace solo los trozos que cambiaron")
     rh.add_argument("--texto", help="texto nuevo para ese fragmento (por defecto, el mismo)")
-    mu = sub.add_parser("musica", help="generar una canción con ACE-Step (letra + descripción en lenguaje natural)")
-    mu.add_argument("-d", "--descripcion", required=True, help="estilo, instrumentos, voz, ambiente…")
-    mu.add_argument("--letra", type=Path, help="archivo .txt/.md con la letra ([Verse], [Chorus]…); sin letra = instrumental")
-    mu.add_argument("-t", "--duracion", type=float, default=0, help="segundos (10-600); 0 = la que elija el modelo")
-    mu.add_argument("--semilla", type=int, default=-1)
-    mu.add_argument("--idioma", default="es")
+    mu = sub.add_parser("musica", help="generar canciones con ACE-Step: archivos .md de canción (ver docs/GUIA.md §8) "
+                                        "o -d DESCRIPCIÓN [--letra ARCHIVO]")
+    mu.add_argument("canciones", nargs="*", type=Path, help="archivos .md de canción (título, Estilo:, letra…)")
+    mu.add_argument("-d", "--descripcion", help="estilo, instrumentos, voz, ambiente… (manda sobre el del .md)")
+    mu.add_argument("--letra", type=Path, help="archivo .txt/.md con la letra; sin letra = instrumental")
+    mu.add_argument("-t", "--duracion", type=float, help="segundos (10-600); 0 = la que elija el modelo")
+    mu.add_argument("--semilla", type=int)
+    mu.add_argument("--idioma")
     mu.add_argument("-o", "--output", type=Path, help="archivo de salida (por defecto en ~/Música/Juglar)")
     ls = sub.add_parser("list", help="ver la cola")
     ls.add_argument("--json", action="store_true")
@@ -590,12 +606,30 @@ def main():
         print(f"#{job['id']} {job['title']}")
     elif args.cmd == "musica":
         import musica
-        titulo, letra = musica.leer_letra(args.letra) if args.letra else (
-            args.output.stem if args.output else "Canción", "")
-        out = args.output or rutas.MUSICA / f"{musica.nombre_archivo(titulo)}.mp3"
-        job = add_musica(out, args.descripcion, letra, args.duracion, args.semilla, args.idioma,
-                         instrumental=not letra.strip(), titulo=titulo)
-        print(f"#{job['id']}  {job['title']}  →  {job['out']}")
+        archivos = list(args.canciones) + ([args.letra] if args.letra else [])
+        if not archivos and not args.descripcion:
+            sys.exit("Indica uno o más .md de canción, o -d «cómo suena»")
+        if args.output and len(archivos) > 1:
+            sys.exit("-o solo vale con una canción")
+        for f in archivos or [None]:
+            try:
+                c = musica.leer_cancion(f) if f else {"titulo": args.output.stem if args.output else "Canción",
+                                                      "descripcion": "", "letra": "", "duracion": None,
+                                                      "idioma": None, "semilla": None, "bpm": None,
+                                                      "tonalidad": "", "instrumental": True}
+            except (OSError, ValueError) as e:
+                print(f"{f}: {e}", file=sys.stderr)
+                continue
+            desc = args.descripcion or c["descripcion"]
+            if not desc:
+                print(f"{f}: no dice cómo suena (añade «Estilo: …» bajo el título, o usa -d)", file=sys.stderr)
+                continue
+            out = args.output or rutas.MUSICA / f"{musica.nombre_archivo(c['titulo'])}.mp3"
+            job = add_musica(out, desc, c["letra"], args.duracion if args.duracion is not None else (c["duracion"] or 0),
+                             args.semilla if args.semilla is not None else (-1 if c["semilla"] is None else c["semilla"]),
+                             args.idioma or c["idioma"] or "es", instrumental=c["instrumental"] or not c["letra"].strip(),
+                             titulo=c["titulo"], bpm=c["bpm"], tonalidad=c["tonalidad"])
+            print(f"#{job['id']}  {job['title']}  →  {job['out']}")
     elif args.cmd == "list":
         q = snapshot()
         if args.json:
