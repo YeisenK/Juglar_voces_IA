@@ -56,16 +56,24 @@ def receta(spec):
         muestreo = {k: v for k, v in md2audio.ficha_ajustes(ficha).items() if k in md2audio.VOICE_KEYS}
         velocidad = ficha.get("velocidad", 1.0)
         propio = md2audio.qwen_settings(ficha["voz"])
-        if velocidad == 1.0 and all(muestreo[k] == propio[k] for k in md2audio.VOICE_KEYS):
+        capas = ficha["capas"] if "capas" in ficha else md2audio.capas_de_voz(ficha["voz"])
+        if capas:
+            extra += ["--capas", json.dumps(capas)]
+            datos["capas"] = capas
+        if velocidad == 1.0 and not capas and all(muestreo[k] == propio[k] for k in md2audio.VOICE_KEYS):
             return receta("qwen:" + ficha["voz"])  # suena igual que su voz: comparten la prueba
         voz = "qwen:" + ficha["voz"]
-        extra = ["--qwen-ajustes", json.dumps(muestreo)]
+        extra += ["--qwen-ajustes", json.dumps(muestreo)]
         datos.update(base=voz, muestreo=muestreo, velocidad=velocidad, ref=_ref_stamp(ficha["voz"]))
         nombre = f"personaje_{slug}"
     elif spec.startswith("qwen:"):
         perfil = spec.split(":", 1)[1]
         cfg = md2audio.qwen_settings(perfil)
         datos.update(muestreo={k: cfg[k] for k in md2audio.VOICE_KEYS}, ref=_ref_stamp(perfil))
+        capas = md2audio.capas_de_voz(perfil)
+        if capas:
+            extra += ["--capas", json.dumps(capas)]
+            datos["capas"] = capas
         voz, nombre = spec, f"qwen_{perfil}"
     else:
         voz, nombre = spec, spec.replace(":", "_")

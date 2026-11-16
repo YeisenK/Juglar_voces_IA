@@ -13,6 +13,7 @@ Los juglares iban de pueblo en pueblo contando historias y dando voz a cada pers
 - **Más de 80 voces** de Qwen3-TTS incluidas (narradores, personajes con nombre y 57 voces para personajes: jóvenes, adultos y viejos, normales, gruñones o alegres, oficios…), más voces rápidas de Piper y Kokoro.
 - **Crea voces nuevas** describiéndolas con palabras: «anciano de 80 años, voz ronca y temblorosa, gruñón».
 - **Personajes con nombre**, cada uno con su voz base, su temperatura y su velocidad.
+- **Voces de muchos**: un eco de la misma voz en otros tonos para legiones, demonios o coros (`—@legion`); `—@legion[0]` lo quita en una intervención.
 - **Cola de exportación** a MP3, OGG, M4B (con capítulos) o WAV, que sigue trabajando en segundo plano aunque cierres la ventana o el equipo esté en reposo.
 - **Calidad de audiolibro**:
   - cifras, fechas, números romanos y abreviaturas leídos como palabras;
@@ -68,7 +69,7 @@ Abre **Juglar** desde el menú de aplicaciones o escribe `juglar`. La app tiene 
 | Pestaña | Para qué |
 |---|---|
 | **Leer** | Escribir, pegar o abrir un texto y escucharlo. A la derecha, *Propiedades*: duración estimada, quién habla en el texto y **Exportar a audio…** |
-| **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. **Exportar carpeta…** convierte un libro entero (una carpeta, un capítulo por archivo). En cada audio terminado, **Rehacer un trozo** vuelve a generar solo la frase que salió mal, o carga el `.md` corregido y rehace solo lo que cambió. **Historial**: los audios exportados que siguen en la computadora. |
+| **Exportar** | La cola de conversión: arrastra archivos o pulsa *Añadir archivos*. **Exportar carpeta…** convierte un libro entero (una carpeta, un capítulo por archivo). En cada audio terminado, **Rehacer un trozo** vuelve a generar solo la frase que salió mal, o carga el `.md` corregido y rehace solo lo que cambió. **Quitar terminados** limpia la cola. **Historial**: los audios y canciones exportados que siguen en la computadora. |
 | **Voces** | Escuchar cada voz o personaje (*Probar*), ajustar su temperatura, crear personajes con nombre y voces nuevas. |
 | **Audiolibro** | Modo flash, pausas, voz de los diálogos, revisión con Whisper, volumen y diccionario de pronunciación. |
 | **Música** | Canciones con tu letra y la música descrita con tus palabras («balada folk con guitarra y voz cálida»), con [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5). Se pueden escribir en un `.md` (título, `Estilo:`, `Duración:`… y la letra) y abrirlas o añadirlas a la cola. Ver [la guía](docs/GUIA.md#8-música-canciones-con-tu-letra). |

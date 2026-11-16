@@ -306,17 +306,18 @@ def quitar_marca(texto, validas, nombres=()):
     """Quita la marca de personaje tras la raya inicial y devuelve (texto, clave).
 
     '—2 Hola' -> clave 2 (número de voz); '—@marta Hola' o '—Marta: Hola' -> clave 'marta' (personaje).
+    '—@legion[0] Hola' -> clave 'legion[0]': esa voz sin sus capas (sin eco ni coro), solo esta vez.
     Un número o nombre que no existe no cuenta como marca («—5 años tengo» sigue siendo texto), salvo con @,
     que siempre se quita para que no se lea en voz alta.
     """
     m = re.match(r"^(\s*[—–])\s*(\d{1,2})\s+(?=\S)", texto)
     if m and int(m.group(2)) in validas:
         return m.group(1) + texto[m.end():], int(m.group(2))
-    m = re.match(rf"^(\s*[—–])\s*@({_PAL})[\s:]+(?=\S)", texto)
+    m = re.match(rf"^(\s*[—–])\s*@({_PAL})(\[0\])?[\s:]+(?=\S)", texto)
     if m:
         clave = slug(m.group(2))
         if clave in nombres:
-            return m.group(1) + texto[m.end():], clave
+            return m.group(1) + texto[m.end():], clave + (m.group(3) or "")
         AVISOS.append(f"Personaje desconocido: @{m.group(2)}")
         return m.group(1) + texto[m.end():], None
     m = re.match(rf"^(\s*[—–])\s*({_PAL}(?:\s+{_PAL}){{0,2}}):\s+(?=\S)", texto)

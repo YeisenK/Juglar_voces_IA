@@ -37,6 +37,7 @@ Hay tres formas de decir quién habla. La marca va **justo después de la raya, 
 | `—Leonor: ¿Tienes miedo?` | Lo mismo, si el personaje existe. |
 | `—2 Solo queda la del fondo.` | La **voz número 2** (se asigna en la pestaña *Voces*). |
 | `—¿Hay alguien ahí?` (sin marca) | La **voz de los diálogos** elegida en la pestaña *Audiolibro* (por defecto, el mismo narrador). |
+| `—@legion[0] Uno solo de nosotros.` | Ese personaje **sin su eco** (ver *Voces de muchos*, más abajo), solo en esta intervención. |
 
 **Acotaciones** (el «dijo Marta» entre rayas):
 
@@ -53,6 +54,15 @@ Hay tres formas de decir quién habla. La marca va **justo después de la raya, 
 2. La marca solo cuenta **al inicio del párrafo**.
 3. Si escribes `—@alguien` y ese personaje no existe, la marca no se lee y en el panel *Propiedades* aparece el aviso «no existe: créalo en Voces».
 4. Los diálogos entre comillas («así» o "así") **no** cambian de voz: los lee el narrador.
+
+**Voces de muchos (eco)**
+
+Algunas voces suenan como si hablaran varios a la vez (una legión, un demonio): Juglar mezcla la voz con copias suyas más graves o agudas y un poco retrasadas. Se define con **capas**, cada una con su `tono` (semitonos), su `retraso` (segundos) y su `volumen` (0–1):
+
+- En una **voz**: un archivo `capas.json` en su carpeta (`~/.local/share/juglar/voces/<voz>/capas.json`), por ejemplo `{"capas": [{"tono": -7, "retraso": 0.02, "volumen": 0.6}]}`. Todos los personajes que usen esa voz la oyen con eco.
+- En un **personaje**: el campo `"capas"` de su ficha en `voces/elenco.json` (manda sobre el de su voz base).
+
+**Probar** en la pestaña *Voces* ya suena con el eco. Para quitarlo en una intervención concreta, añade `[0]` a la marca: `—@demonio[0] Y ahora te hablo yo solo.` El `[0]` no se lee.
 
 ### 2.3 Números, fechas y abreviaturas
 

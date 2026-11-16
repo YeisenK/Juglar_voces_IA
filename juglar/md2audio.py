@@ -400,6 +400,7 @@ class QwenEngine:
         import struct
 
         try:
+            voices = [voz_base(v) for v in voices] if voices else voices
             req = {"texts": texts, **({"gen": gen} if gen else {}), **({"voices": voices} if voices else {})}
             self.proc.stdin.write((json.dumps(req, ensure_ascii=False) + "\n").encode())
             self.proc.stdin.flush()
@@ -422,6 +423,65 @@ class QwenEngine:
         with contextlib.suppress(Exception):
             self.proc.stdin.close()
             self.proc.wait(timeout=10)
+
+
+def aplicar_capas(pcm, capas, rate=QWEN_RATE):
+    """Voz de muchos (p. ej. Legión): mezcla el audio con copias suyas en otros tonos y un poco retrasadas.
+    capas: [{"tono": semitonos, "retraso": segundos, "volumen": 0-1}, …]. La voz original va entera encima."""
+    import numpy as np
+    x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+    if not len(x):
+        return pcm
+    pista = lambda c: int(rate * max(float(c.get("retraso", 0)), 0))  # noqa: E731
+    out = np.zeros(len(x) + max(pista(c) for c in capas), dtype=np.float32)
+    out[:len(x)] += x
+    for c in capas:
+        filtro = f"rubberband=pitch={2 ** (float(c.get('tono', 0)) / 12):.5f}:formant=shifted"
+        y = np.frombuffer(subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-f", "s16le", "-ar", str(rate), "-ac", "1", "-i", "-", "-af", filtro,
+             "-f", "s16le", "-ar", str(rate), "-ac", "1", "-"], input=pcm, capture_output=True, check=True).stdout,
+            dtype=np.int16).astype(np.float32)[:len(x)]
+        i = pista(c)
+        out[i:i + len(y)] += float(c.get("volumen", 0.5)) * y
+    pico = np.abs(out).max()
+    if pico:
+        out *= np.abs(x).max() / pico   # el mismo pico que la voz sola: no suena más fuerte que los demás
+    return out.astype(np.int16).tobytes()
+
+
+CAPAS_TODO = None   # --capas: capas para todo el texto (la prueba de un personaje como Legión)
+SIN_CAPAS = "[0]"   # —@voz[0]: esa intervención sin capas (el demonio sin eco, Legión con una sola voz)
+
+
+def voz_base(v):
+    """La voz que genera Qwen: sin el «[0]» de sin capas."""
+    return v[:-len(SIN_CAPAS)] if v and v.endswith(SIN_CAPAS) else v
+
+
+def capas_de_voz(perfil):
+    """Capas propias de una voz de Qwen (capas.json en su carpeta), p. ej. el eco grave de los demonios."""
+    return _json(QWEN_VOICES / perfil / "capas.json").get("capas") if perfil else None
+
+
+def capas_de(v, fichas):
+    """Capas de una marca de voz: «@personaje» (las suyas o, si no tiene, las de su voz base) o «perfil»."""
+    if v and v.startswith("@"):
+        f = fichas.get(v[1:], {})
+        return f["capas"] if "capas" in f else capas_de_voz(f.get("voz"))
+    return capas_de_voz(v)
+
+
+def con_capas(results, voices):
+    """Aplica las capas de los personajes y voces que las tengan (ficha «capas» en elenco.json o capas.json de la
+    voz) al audio ya generado."""
+    fichas = elenco()
+    capas = {v: c for v in set(voices or []) if v and not v.endswith(SIN_CAPAS) for c in [capas_de(v, fichas)] if c}
+    if not capas and not CAPAS_TODO:
+        yield from results
+        return
+    for pcm, v in zip(results, voices):
+        c = capas.get(v) or (CAPAS_TODO if not (v and v.startswith("@")) else None)
+        yield aplicar_capas(pcm, c) if c else pcm
 
 
 def qwen_batches(texts, voices=None, first=QWEN_BATCH):
@@ -759,7 +819,10 @@ def construir_trabajos(a, segs):
         if kind == "p" and text.lstrip()[:1] in "—–":
             if qwen and not flash:
                 trozos = texto_es.dividir_dialogo(text, validas=set(mapa_personajes), nombres=marcables)
-                voces = [(((("@" + num) if num in nombres else alias[num]) if isinstance(num, str) else mapa_personajes.get(num))
+                def voz_de(num):  # «legion[0]» -> «@legion[0]»: la voz sin sus capas
+                    base, sin = (num[:-3], SIN_CAPAS) if num.endswith(SIN_CAPAS) else (num, "")
+                    return (("@" + base) if base in nombres else alias[base]) + sin
+                voces = [((voz_de(num) if isinstance(num, str) else mapa_personajes.get(num))
                           if num else voz_dialogo)
                          if rol == "dialogo" else None for rol, _t, num in trozos]
                 if any(v and v != propia for v in voces):  # solo se trocea si de verdad cambia la voz
@@ -818,8 +881,12 @@ def main():
     ap.add_argument("--actualizar", metavar="MD",
                     help="con un audio exportado como entrada: rehace solo los trozos que cambiaron en este texto")
     ap.add_argument("--cpu", action="store_true", help="no usar la GPU aunque esté disponible")
+    ap.add_argument("--capas", metavar="JSON", help="con Qwen: voz de muchos para lo que lee el narrador, "
+                                                    "p. ej. '[{\"tono\": -5, \"retraso\": 0.03, \"volumen\": 0.6}]'")
     ap.add_argument("--all-kokoro", action="store_true", help="con --list-voices: incluye voces de Kokoro de otros idiomas")
     a = ap.parse_args()
+    if a.capas:
+        globals()["CAPAS_TODO"] = json.loads(a.capas) or None
 
     if a.list_voices:
         for v in list_voices(a.all_kokoro):
@@ -960,6 +1027,7 @@ def main():
                     results = qwen_revisados(engine, rev, [j[0] for j in jobs], [j[4] for j in jobs], qcfg_run, revision)
                 else:
                     results = qwen_results(engine, [j[0] for j in jobs], [j[4] for j in jobs])
+                results = con_capas(results, [j[4] for j in jobs])
             elif workers == 1:  # en el propio proceso (GPU)
                 _load_voice(a.voice, a.speed, threads, gpu)
                 results = map(_synth, (j[0] for j in jobs))
@@ -1086,11 +1154,11 @@ def sintetizar_como(mapa, textos, voces, revision):
             if cfg["revisar"] and not mapa.get("flash") and WHISPER_PY.exists() and WHISPER_WORKER.exists():
                 rev = Revisor(QWEN_RATE)
                 try:
-                    pcms = list(qwen_revisados(engine, rev, textos, voces, cfg, revision))
+                    pcms = list(con_capas(qwen_revisados(engine, rev, textos, voces, cfg, revision), voces))
                 finally:
                     rev.close()
             else:
-                pcms = list(qwen_results(engine, textos, voces))
+                pcms = list(con_capas(qwen_results(engine, textos, voces), voces))
         finally:
             engine.close()
     else:
@@ -1316,7 +1384,7 @@ def stream_raw(a, jobs, rate, threads, gpu):
     texts = [j[0] for j in jobs]
     if a.voice.startswith("qwen:"):
         engine = QwenEngine(a.voice.split(":", 1)[1], a.speed, qwen_cfg(a), qwen_override(a))
-        results = qwen_results(engine, texts, [j[4] for j in jobs], first=1)  # la primera frase sola para que suene cuanto antes
+        results = con_capas(qwen_results(engine, texts, [j[4] for j in jobs], first=1), [j[4] for j in jobs])  # la primera frase sola para que suene cuanto antes
     else:
         _load_voice(a.voice, a.speed, threads, gpu)
         results = map(_synth, texts)

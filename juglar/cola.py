@@ -223,7 +223,9 @@ def _anotar(h, job, ev, cuando=None):
     cuando = cuando or time.time()
     e = h.setdefault(out, {"audio": out, "creado": cuando, "rehechos": 0})
     if not job.get("args"):
-        e["titulo"] = job["title"]
+        e["titulo"] = job["title"].removeprefix("♪ ")
+    if job.get("tipo") == "musica":
+        e["tipo"] = "musica"
     e.update(voz=job["voice"], duracion=ev.get("duration"), capitulos=ev.get("chapters"), modificado=cuando)
     if job.get("args"):
         e["rehechos"] = e.get("rehechos", 0) + (ev.get("cambios") or 1)
@@ -260,7 +262,7 @@ def historial():
         cambiado = False
         vistos = {j for e in h.values() for j in e.get("jobs", [])}
         for job in load()["jobs"]:
-            if job.get("status") == "done" and job.get("tipo") != "musica" and job["id"] not in vistos:
+            if job.get("status") == "done" and job["id"] not in vistos:
                 _anotar(h, job, job, job.get("started") or job.get("added"))
                 cambiado = True
         vivos = {k: e for k, e in h.items() if Path(k).exists()}
@@ -290,6 +292,8 @@ def remove_job(job_id):
 
 
 def clear_finished():
+    """Quita de la cola lo terminado (sigue en el historial: se anota antes de quitarlo)."""
+    historial()
     update(lambda q: q.update(jobs=[j for j in q["jobs"] if j["status"] not in FINISHED]))
 
 
@@ -481,11 +485,9 @@ def work_loop():
                 j["done"] = 0
         update(_finish)
         cleanup_text(job)
-        if status == "done" and job.get("tipo") == "musica":
-            notify("Canción lista", Path(job["out"]).name)
-        elif status == "done":
+        if status == "done":
             registrar(job, ev or {})
-            notify("Audio listo", Path(job["out"]).name)
+            notify("Canción lista" if job.get("tipo") == "musica" else "Audio listo", Path(job["out"]).name)
         elif status == "failed":
             notify("No se pudo convertir", f"{job['title']}: {message}")
 

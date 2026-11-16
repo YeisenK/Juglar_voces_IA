@@ -811,12 +811,14 @@ class JuglarWindow(Adw.ApplicationWindow):
         head, right = strip("Cola de exportación")
         self.pause_btn = Gtk.Button()
         self.pause_btn.connect("clicked", self.on_pause_clicked)
-        self.clear_btn = tool_button("edit-clear-all-symbolic", "Quitar terminados", "Quitar de la lista lo terminado",
-                                     lambda *_: (cola.clear_finished(), self.refresh_queue()), "flat")
+        self.clear_btn = tool_button("edit-clear-all-symbolic", "Quitar terminados",
+                                     "Quitar de la lista lo terminado, cancelado o fallido "
+                                     "(los audios y canciones siguen en el Historial)",
+                                     self.on_clear_finished)
         right.append(self.clear_btn)
         right.append(self.pause_btn)
         right.append(tool_button("document-open-recent-symbolic", "Historial",
-                                 "Los audios exportados que siguen en la computadora: escucharlos o rehacer un trozo",
+                                 "Los audios y canciones que siguen en la computadora: escucharlos o rehacer un trozo",
                                  self.open_history, "flat"))
         right.append(tool_button("folder-symbolic", "Exportar carpeta…",
                                  "Un libro: todos los capítulos (.md o .txt) de una carpeta, en orden",
@@ -1802,10 +1804,12 @@ class JuglarWindow(Adw.ApplicationWindow):
                 voz = "qwen:" + names[self.base_row.get_selected()]
                 vals = self.char_sound.values()
                 speed = vals.pop("velocidad", 1.0)
+                capas = md2audio.capas_de("@" + spec.split(":", 1)[1], load_elenco())
             else:
                 voz, vals, speed = spec, self.voice_sound.values(), 1.0
+                capas = md2audio.capas_de_voz(spec.split(":", 1)[1]) if spec.startswith("qwen:") else None
             self.play(pruebas.texto(), voice=voz, status=f"Probando cambios de {nombre}…",
-                      extra=["--qwen-ajustes", json.dumps(vals)], speed_mul=speed / self.speed_adj.get_value(),
+                      extra=["--qwen-ajustes", json.dumps(vals), *(["--capas", json.dumps(capas)] if capas else [])], speed_mul=speed / self.speed_adj.get_value(),
                       preview=spec)
             return
         r = pruebas.receta(spec)
@@ -2449,20 +2453,27 @@ class JuglarWindow(Adw.ApplicationWindow):
         self.confirmar_marcas([(c.name, c.read_text(encoding="utf-8", errors="replace")) for c in lib.capitulos],
                               preguntar, voice)
 
+    def on_clear_finished(self, _btn=None):
+        n = sum(j["status"] in cola.FINISHED for j in cola.snapshot()["jobs"])
+        cola.clear_finished()
+        self.refresh_queue()
+        self.toast(f"Quitados {n} trabajo{'s' if n != 1 else ''} terminado{'s' if n != 1 else ''} · siguen en el Historial")
+
     # --- historial de audios exportados (los que se borraron de la computadora ya no salen)
     def open_history(self, _btn=None):
         entradas = cola.historial()
-        dlg = Adw.Dialog(title="Historial de audios", content_width=780, content_height=620)
+        dlg = Adw.Dialog(title="Historial de audios y canciones", content_width=780, content_height=620)
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar())
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=6, margin_bottom=12,
                       margin_start=12, margin_end=12)
-        box.append(label("Los audios que has exportado, mientras sigan en la computadora. El lápiz abre sus trozos "
-                         "para rehacer el que salió mal.", "desc", xalign=0, wrap=True))
+        box.append(label("Los audios y canciones que has hecho, mientras sigan en la computadora. El lápiz abre "
+                         "los trozos de un audio para rehacer el que salió mal.", "desc", xalign=0, wrap=True))
         if not entradas:
             box.append(Adw.StatusPage(icon_name="document-open-recent-symbolic", vexpand=True,
                                       title="Todavía no hay audios",
-                                      description="Aquí aparecerá cada audio que exportes (si no lo has borrado)."))
+                                      description="Aquí aparecerá cada audio que exportes y cada canción que "
+                                                  "generes (si no los has borrado)."))
         else:
             search = Gtk.SearchEntry(placeholder_text="Buscar por nombre")
             box.append(search)
@@ -2471,16 +2482,19 @@ class JuglarWindow(Adw.ApplicationWindow):
             for e in entradas:
                 audio = Path(e["audio"])
                 fecha = GLib.DateTime.new_from_unix_local(int(e.get("modificado", 0))).format("%d/%m/%Y %H:%M")
-                partes = [str(audio.parent), fmt_time(e.get("duracion")), fecha]
+                cancion = e.get("tipo") == "musica"
+                partes = (["Canción"] if cancion else []) + [str(audio.parent), fmt_time(e.get("duracion")), fecha]
                 if e.get("rehechos"):
                     partes.append(f"{e['rehechos']} trozo{'s' if e['rehechos'] > 1 else ''} rehecho"
                                   f"{'s' if e['rehechos'] > 1 else ''}")
                 row = Adw.ActionRow(title=audio.name, subtitle=" · ".join(partes), use_markup=False)
-                row.clave = (audio.name + " " + e.get("titulo", "")).lower()
+                row.clave = (audio.name + " " + e.get("titulo", "") + (" canción" if cancion else "")).lower()
+                row.add_prefix(Gtk.Image(icon_name="audio-x-generic-symbolic" if cancion
+                                         else "audio-speakers-symbolic"))
                 for icon, tip, cb, ok in (
                         ("media-playback-start-symbolic", "Escuchar", lambda _b, a=audio: self.launch(a), True),
                         ("document-edit-symbolic", "Rehacer un trozo", lambda _b, a=audio: self.open_fragments(a),
-                         md2audio.mapa_de(audio).exists()),
+                         not cancion and md2audio.mapa_de(audio).exists()),
                         ("folder-open-symbolic", "Abrir carpeta", lambda _b, a=audio: self.launch(a, folder=True), True)):
                     b = Gtk.Button(icon_name=icon, tooltip_text=tip, valign=Gtk.Align.CENTER, visible=ok)
                     b.add_css_class("flat")
@@ -2794,7 +2808,9 @@ class JuglarWindow(Adw.ApplicationWindow):
         active = [j for j in jobs if j["status"] in ("queued", "running")]
         running = next((j for j in jobs if j["status"] == "running"), None)
         self.queue_stack.set_visible_child_name("lista" if jobs else "vacio")
-        self.clear_btn.set_visible(any(j["status"] in cola.FINISHED for j in jobs))
+        n_fin = sum(j["status"] in cola.FINISHED for j in jobs)
+        self.clear_btn.set_visible(bool(n_fin))
+        self.clear_btn.get_child().set_label(f"Quitar terminados ({n_fin})")
         self.pause_btn.set_visible(bool(active) or paused)
         self.pause_btn.set_child(Adw.ButtonContent(
             icon_name="media-playback-start-symbolic" if paused else "media-playback-pause-symbolic",
