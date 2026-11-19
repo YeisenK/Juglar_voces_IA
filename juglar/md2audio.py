@@ -397,6 +397,22 @@ class QwenEngine:
             preexec_fn=lambda: libc.prctl(1, signal.SIGTERM))  # muere si md2audio muere
 
     def synth(self, texts, gen=None, voices=None):
+        """Genera el audio. Si un personaje tiene «coro» (lista de voces), su texto se genera con cada una de esas
+        voces y se mezclan, desfasadas un poco (voz de multitud: gente distinta, no copias de una)."""
+        fichas = elenco() if voices else {}
+        coros = [coro_de(v, fichas) for v in voices or []]
+        if not any(coros):
+            return self._synth(texts, gen, voices)
+        t2, v2, plan = [], [], []
+        for t, v, c in zip(texts, voices, coros):
+            plan.append((len(t2), c))
+            for cv in (c["voces"] if c else [v]):
+                t2.append(t)
+                v2.append(cv)
+        audio = self._synth(t2, gen, v2)
+        return [mezclar_coro(audio[i:i + len(c["voces"])], c["desfase"]) if c else audio[i] for i, c in plan]
+
+    def _synth(self, texts, gen=None, voices=None):
         import struct
 
         try:
@@ -423,6 +439,33 @@ class QwenEngine:
         with contextlib.suppress(Exception):
             self.proc.stdin.close()
             self.proc.wait(timeout=10)
+
+
+def coro_de(v, fichas):
+    """{"voces": [...], "desfase": s} si la marca es un personaje con «coro» en su ficha (y no lleva «[0]»)."""
+    if not v or not v.startswith("@") or v.endswith(SIN_CAPAS):
+        return None
+    f = fichas.get(v[1:], {})
+    return {"voces": f["coro"], "desfase": float(f.get("desfase", 0.02))} if f.get("coro") else None
+
+
+def mezclar_coro(pcms, desfase, rate=QWEN_RATE):
+    """Suma el mismo texto dicho por varias voces, cada una empezando algo después (0 a «desfase» segundos)."""
+    import numpy as np
+    xs = [np.frombuffer(p, dtype=np.int16).astype(np.float32) for p in pcms if p]
+    if not xs:
+        return b""
+    rng = np.random.default_rng(len(xs[0]))   # mismo texto, mismo reparto de retrasos
+    picos = [np.abs(x).max() for x in xs]
+    pistas = [(int(rate * rng.uniform(0, max(desfase, 0))), rng.uniform(0.5, 1.0), x / (pico or 1.0))
+              for x, pico in zip(xs, picos)]
+    out = np.zeros(max(d + len(x) for d, _, x in pistas), dtype=np.float32)
+    for d, vol, x in pistas:
+        out[d:d + len(x)] += vol * x
+    pico = np.abs(out).max()
+    if pico:
+        out *= (sum(picos) / len(picos)) / pico   # suena tan fuerte como una voz suelta
+    return out.astype(np.int16).tobytes()
 
 
 def aplicar_capas(pcm, capas, rate=QWEN_RATE):
